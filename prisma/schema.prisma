@@ -1,0 +1,57 @@
+// Esquema de la base de dades (Prisma) del projecte "Physics Stars".
+// La base de dades real serà un Neon Postgres connectat a través de Vercel;
+// aquest fitxer defineix l'estructura perquè, un cop es connecti la variable
+// d'entorn DATABASE_URL, tot funcioni sense haver de tocar el codi.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// A partir de Prisma 7, les URLs de connexió ja no es defineixen aquí:
+// la connexió per a migracions es configura a `prisma.config.ts`, i la
+// connexió que fa servir l'aplicació en temps d'execució es passa
+// explícitament com a "driver adapter" en crear el PrismaClient
+// (vegeu src/lib/db/client.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+// Rol de l'usuari dins l'aplicació. Permet distingir alumnat, professorat
+// i administració sense necessitat de taules addicionals de moment.
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+// Compte d'usuari. La contrasenya mai es guarda en text pla: només
+// s'emmagatzema el resultat de l'algorisme Argon2id (vegeu server/security/password.ts).
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  role         Role     @default(STUDENT)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions Session[]
+
+  @@map("users")
+}
+
+// Sessió activa d'un usuari. `id` és el hash SHA-256 del token de sessió
+// (el token en cru només viatja dins la cookie httpOnly del navegador),
+// de manera que si algú accedís a la base de dades no podria suplantar
+// cap sessió a partir d'aquesta taula.
+model Session {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}

@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/*
+ * Paleta de colors del projecte "Physics Stars".
+ * Tema fosc espacial (blau/indigo) amb un accent groc "estrella",
+ * pensat perquè es reconegui fàcilment com a identitat del joc.
+ */
+:root {
+  --background: #0b1020;
+  --background-elevated: #131a30;
+  --foreground: #eef1fa;
+  --foreground-muted: #9aa4c2;
+  --brand-primary: #5b6ee8;
+  --brand-primary-hover: #4a5ad0;
+  --brand-accent: #f7c948;
+  --border-subtle: #232b48;
+  --danger: #f27272;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-primary-hover: var(--brand-primary-hover);
+  --color-brand-accent: var(--brand-accent);
+  --color-border-subtle: var(--border-subtle);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
