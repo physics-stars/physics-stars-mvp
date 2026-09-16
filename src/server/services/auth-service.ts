@@ -31,7 +31,8 @@ import {
 export type LoginFailureReason =
   | "validation_error"
   | "invalid_credentials"
-  | "rate_limited";
+  | "rate_limited"
+  | "account_disabled";
 
 export type LoginResult =
   | {
@@ -78,6 +79,12 @@ export async function login(
 
   if (!user || !passwordIsValid) {
     return { success: false, reason: "invalid_credentials" };
+  }
+
+  // Es comprova DESPRÉS de verificar la contrasenya (mai abans), perquè
+  // el temps de resposta no reveli si un compte desactivat existeix.
+  if (!user.isActive) {
+    return { success: false, reason: "account_disabled" };
   }
 
   resetLoginRateLimit(rateLimitKey);

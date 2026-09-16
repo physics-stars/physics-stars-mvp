@@ -53,6 +53,10 @@ export async function POST(request: NextRequest) {
           status: 429,
           message: "Massa intents. Torna-ho a provar d'aquí a uns minuts.",
         },
+        account_disabled: {
+          status: 403,
+          message: "Aquest compte ha estat desactivat. Parla amb el teu professor/a.",
+        },
       };
       const { status, message } = errorsByReason[result.reason];
       return NextResponse.json({ error: message }, { status });

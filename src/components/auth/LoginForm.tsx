@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { getHomePathForRole } from "@/lib/config/roles";
 
 /*
  * Formulari de login. Envia el nom d'usuari i la contrasenya a
@@ -40,7 +41,10 @@ export function LoginForm() {
         return;
       }
 
-      const redirectTo = searchParams.get("redirectTo") ?? "/menu";
+      // Si venim d'una redirecció des d'una ruta protegida es respecta
+      // (p. ex. `/teacher/aules`); si no, es va a la pàgina d'inici
+      // pròpia del rol de l'usuari que acaba d'entrar.
+      const redirectTo = searchParams.get("redirectTo") ?? getHomePathForRole(data.user.role);
       router.push(redirectTo);
       router.refresh();
     } catch {
