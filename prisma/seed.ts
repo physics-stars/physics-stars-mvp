@@ -1,4 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import "dotenv/config";
+import { createPrismaClient } from "../src/lib/db/create-prisma-client";
 import { hashPassword } from "../src/server/security/password";
 
 /*
@@ -7,8 +8,15 @@ import { hashPassword } from "../src/server/security/password";
  * S'executa amb `npm run db:seed`. NOMÉS pensat per a desenvolupament:
  * no s'ha d'executar mai contra una base de dades de producció real
  * amb aquesta contrasenya d'exemple.
+ *
+ * Aquest script corre com un procés de Node independent (via tsx), fora
+ * de Next.js: per això carrega `.env` explícitament (`dotenv/config`,
+ * ja que aquí ningú ho fa automàticament) i crea el seu propi
+ * PrismaClient amb `createPrismaClient()` en lloc del singleton de
+ * `src/lib/db/client.ts` (guardat amb `import "server-only"`, pensat
+ * només per córrer dins l'aplicació Next.js).
  */
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
   const passwordHash = await hashPassword("Estrella2026!");
