@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { getCurrentUser } from "@/server/services/current-user";
+import { getHomePathForRole } from "@/lib/config/roles";
 
 // Pàgina d'inici de sessió. Mostra el formulari dins una targeta centrada,
 // amb un enllaç de tornada a la pàgina d'inici.
@@ -9,7 +12,14 @@ export const metadata: Metadata = {
   title: "Inicia sessió — Physics Stars",
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  // Si ja hi ha una sessió vàlida, aquesta pàgina no s'ha de poder veure:
+  // es redirigeix directament a la pàgina d'inici del seu rol.
+  const user = await getCurrentUser();
+  if (user) {
+    redirect(getHomePathForRole(user.role));
+  }
+
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-4 py-16">
       <div className="flex w-full max-w-sm flex-col gap-8">

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/client";
-import type { User } from "@prisma/client";
+import type { Role, User } from "@prisma/client";
 
 /*
  * Accés a dades de la taula `User`. Cap altra part del codi hauria de
@@ -16,12 +16,34 @@ export function findUserById(id: string): Promise<User | null> {
   return prisma.user.findUnique({ where: { id } });
 }
 
+export function findUsersByRole(role: Role): Promise<User[]> {
+  return prisma.user.findMany({ where: { role }, orderBy: { displayName: "asc" } });
+}
+
+// Alumnat que encara no té cap aula assignada.
+export function findUnassignedStudents(): Promise<User[]> {
+  return prisma.user.findMany({
+    where: { role: "STUDENT", classroomId: null },
+    orderBy: { displayName: "asc" },
+  });
+}
+
 export function createUser(data: {
   username: string;
   passwordHash: string;
   displayName: string;
+  role?: Role;
+  classroomId?: string | null;
 }): Promise<User> {
   return prisma.user.create({ data });
+}
+
+export function setUserActive(id: string, isActive: boolean): Promise<User> {
+  return prisma.user.update({ where: { id }, data: { isActive } });
+}
+
+export function updateUserPasswordHash(id: string, passwordHash: string): Promise<User> {
+  return prisma.user.update({ where: { id }, data: { passwordHash } });
 }
 
 // Dades públiques d'un usuari, segures per retornar al frontend
@@ -39,5 +61,27 @@ export function toPublicUser(user: User): PublicUser {
     username: user.username,
     displayName: user.displayName,
     role: user.role,
+  };
+}
+
+// Vista d'un usuari per als panells de gestió (professorat/admin): inclou
+// `isActive` (per mostrar/gestionar l'estat) però, com `PublicUser`, MAI
+// el `passwordHash` — és el tipus segur per passar com a props a un
+// component de client.
+export interface ManagedUserView {
+  id: string;
+  username: string;
+  displayName: string;
+  role: Role;
+  isActive: boolean;
+}
+
+export function toManagedUserView(user: User): ManagedUserView {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    isActive: user.isActive,
   };
 }

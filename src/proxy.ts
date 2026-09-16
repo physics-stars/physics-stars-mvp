@@ -30,5 +30,11 @@ export function proxy(request: NextRequest) {
 // El "matcher" ha de ser un array estàtic (Next.js l'analitza en temps de
 // compilació), per això no es genera dinàmicament a partir d'una llista.
 export const config = {
-  matcher: ["/menu/:path*", "/profile/:path*", "/preferences/:path*"],
+  matcher: [
+    "/menu/:path*",
+    "/teacher/:path*",
+    "/admin/:path*",
+    "/profile/:path*",
+    "/preferences/:path*",
+  ],
 };

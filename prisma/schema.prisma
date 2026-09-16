@@ -32,12 +32,42 @@ model User {
   passwordHash String
   displayName  String
   role         Role     @default(STUDENT)
+  // Compte desactivat: no pot iniciar sessió, però es conserva a la base
+  // de dades (mai s'esborren usuaris des de l'aplicació).
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Només té sentit per a alumnat (STUDENT): l'aula on està assignat.
+  // Si s'esborra l'aula, l'alumne queda "sense aula" (SetNull) en lloc
+  // d'esborrar-se.
+  classroomId String?
+  classroom   Classroom? @relation("ClassroomStudents", fields: [classroomId], references: [id], onDelete: SetNull)
+
+  // Només té sentit per a professorat (TEACHER): les aules que imparteix.
+  taughtClassrooms Classroom[] @relation("ClassroomTeacher")
+
   sessions Session[]
 
+  @@index([classroomId])
+  @@index([role])
   @@map("users")
+}
+
+// Aula ("classe") gestionada per un professor, amb l'alumnat assignat.
+model Classroom {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacherId String
+  teacher   User   @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  students User[] @relation("ClassroomStudents")
+
+  @@index([teacherId])
+  @@map("classrooms")
 }
 
 // Sessió activa d'un usuari. `id` és el hash SHA-256 del token de sessió
