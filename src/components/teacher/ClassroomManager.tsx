@@ -127,7 +127,7 @@ export function ClassroomManager({ initialClassrooms }: ClassroomManagerProps) {
             required
           />
         </div>
-        <Button type="submit" className="w-auto" isLoading={isBusy}>
+        <Button type="submit" fullWidth={false} isLoading={isBusy}>
           + Crea aula
         </Button>
       </form>
@@ -149,10 +149,10 @@ export function ClassroomManager({ initialClassrooms }: ClassroomManagerProps) {
               </option>
             ))}
           </select>
-          <Button type="button" className="w-auto" isLoading={isBusy} onClick={handleMoveSelected}>
+          <Button type="button" fullWidth={false} isLoading={isBusy} onClick={handleMoveSelected}>
             Mou
           </Button>
-          <Button type="button" variant="ghost" className="w-auto" onClick={clear}>
+          <Button type="button" variant="ghost" fullWidth={false} onClick={clear}>
             Cancel·la selecció
           </Button>
         </div>
@@ -160,12 +160,9 @@ export function ClassroomManager({ initialClassrooms }: ClassroomManagerProps) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {classrooms.map((classroom) => (
-          <section
-            key={classroom.id}
-            className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-background-elevated p-5"
-          >
+          <section key={classroom.id} className="panel-glass flex flex-col gap-3 p-5">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold">
+              <h2 className="heading-display text-lg font-bold text-foreground">
                 {classroom.name}{" "}
                 <span className="text-sm font-normal text-foreground-muted">
                   ({classroom.students.length})
@@ -174,7 +171,8 @@ export function ClassroomManager({ initialClassrooms }: ClassroomManagerProps) {
               <Button
                 type="button"
                 variant="ghost"
-                className="w-auto text-danger"
+                fullWidth={false}
+                className="text-danger"
                 onClick={() => handleDeleteClassroom(classroom.id)}
                 disabled={isBusy}
               >
@@ -205,7 +203,8 @@ export function ClassroomManager({ initialClassrooms }: ClassroomManagerProps) {
                     <Button
                       type="button"
                       variant="secondary"
-                      className="w-auto text-xs"
+                      fullWidth={false}
+                      className="text-xs"
                       onClick={() => handleResetPassword(student.id, student.username)}
                       disabled={isBusy}
                     >

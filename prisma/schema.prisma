@@ -70,6 +70,52 @@ model Classroom {
   @@map("classrooms")
 }
 
+// Dificultat d'un nivell (text lliure evitat a propòsit: es prefereix un
+// enum tipat perquè la interfície sempre mostri un valor vàlid i conegut).
+enum Difficulty {
+  FACIL
+  MITJA
+  DIFICIL
+}
+
+// Un "món" del joc: un bloc temàtic de física (p. ex. Cinemàtica) amb els
+// seus nivells. `isAvailable` distingeix el contingut ja publicat del que
+// encara està "Properament" — no hi ha (encara) seguiment de progrés per
+// alumne: això depèn del joc real (Unity), que encara no està integrat.
+model World {
+  id               String  @id @default(cuid())
+  slug             String  @unique
+  name             String
+  tagline          String
+  shortDescription String
+  description      String
+  // Llista de missions/objectius mostrats al panell de detall.
+  objectives       String[]
+  order            Int     @default(0)
+  isAvailable      Boolean @default(true)
+
+  levels Level[]
+
+  @@map("worlds")
+}
+
+// Un nivell dins d'un món.
+model Level {
+  id          String     @id @default(cuid())
+  title       String
+  levelNumber Int
+  description String
+  difficulty  Difficulty
+  order       Int        @default(0)
+  isAvailable Boolean    @default(true)
+
+  worldId String
+  world   World  @relation(fields: [worldId], references: [id], onDelete: Cascade)
+
+  @@index([worldId])
+  @@map("levels")
+}
+
 // Sessió activa d'un usuari. `id` és el hash SHA-256 del token de sessió
 // (el token en cru només viatja dins la cookie httpOnly del navegador),
 // de manera que si algú accedís a la base de dades no podria suplantar

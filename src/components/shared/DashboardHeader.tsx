@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 
@@ -16,8 +17,11 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ displayName, roleLabel, homeHref }: DashboardHeaderProps) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border-subtle px-6 py-4">
-      <Link href={homeHref} className="text-lg font-bold tracking-tight text-foreground">
-        Physics<span className="text-brand-accent">Stars</span>
+      <Link href={homeHref} className="flex items-center gap-2.5">
+        <Image src="/logo.svg" alt="" width={26} height={26} />
+        <span className="heading-display text-lg font-bold tracking-wide text-foreground">
+          Physics Stars
+        </span>
       </Link>
       <div className="flex items-center gap-4">
         <span className="text-sm text-foreground-muted">

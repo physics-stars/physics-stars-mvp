@@ -12,7 +12,7 @@ export default async function TeacherHomePage() {
   return (
     <main className="flex flex-1 flex-col items-center gap-8 px-4 py-16">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-3xl font-bold tracking-tight">
+        <h1 className="heading-display text-3xl font-bold text-foreground">
           Hola, {user.displayName}
         </h1>
         <p className="max-w-md text-foreground-muted">
