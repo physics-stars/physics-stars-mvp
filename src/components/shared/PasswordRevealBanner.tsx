@@ -31,19 +31,19 @@ export function PasswordRevealBanner({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-brand-accent bg-background-elevated p-4">
+    <div className="flex flex-col gap-2 rounded-xl border border-brand-primary bg-background-elevated p-4">
       <p className="text-sm text-foreground">
         Contrasenya generada per a <strong>{username}</strong>: apunta-la ara,
         no es tornarà a mostrar.
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <code className="rounded-lg bg-background px-3 py-1.5 text-base font-mono tracking-wide text-brand-accent">
+        <code className="rounded-lg bg-background px-3 py-1.5 text-base font-mono tracking-wide text-brand-primary">
           {plainPassword}
         </code>
-        <Button type="button" variant="secondary" className="w-auto" onClick={handleCopy}>
+        <Button type="button" variant="secondary" fullWidth={false} onClick={handleCopy}>
           {copied ? "Copiada!" : "Copia"}
         </Button>
-        <Button type="button" variant="ghost" className="w-auto" onClick={onClose}>
+        <Button type="button" variant="ghost" fullWidth={false} onClick={onClose}>
           Tanca
         </Button>
       </div>

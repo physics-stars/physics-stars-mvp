@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { getHomePathForRole } from "@/lib/config/roles";
 
 /*
@@ -61,17 +62,18 @@ export function LoginForm() {
         name="username"
         label="Nom d'usuari"
         type="text"
+        tone="parchment"
         autoComplete="username"
         value={username}
         onChange={(event) => setUsername(event.target.value)}
         placeholder="p. ex. maria.garcia"
         required
       />
-      <Input
+      <PasswordInput
         id="password"
         name="password"
         label="Contrasenya"
-        type="password"
+        tone="parchment"
         autoComplete="current-password"
         value={password}
         onChange={(event) => setPassword(event.target.value)}

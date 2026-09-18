@@ -61,7 +61,8 @@ function UserActionRow({
         <Button
           type="button"
           variant="secondary"
-          className="w-auto text-xs"
+          fullWidth={false}
+          className="text-xs"
           onClick={onResetPassword}
           disabled={disabled}
         >
@@ -70,7 +71,8 @@ function UserActionRow({
         <Button
           type="button"
           variant="ghost"
-          className="w-auto text-xs"
+          fullWidth={false}
+          className="text-xs"
           onClick={onToggleActive}
           disabled={disabled}
         >
@@ -230,8 +232,8 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
       )}
 
       {/* Crear compte nou */}
-      <section className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-background-elevated p-5">
-        <h2 className="text-lg font-semibold">+ Nou usuari</h2>
+      <section className="panel-glass flex flex-col gap-3 p-5">
+        <h2 className="heading-display text-lg font-bold text-foreground">+ Nou usuari</h2>
         <form onSubmit={handleCreateUser} className="flex flex-wrap items-end gap-3">
           <div className="w-56">
             <Input
@@ -279,7 +281,7 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
               </select>
             </div>
           )}
-          <Button type="submit" className="w-auto" isLoading={isBusy}>
+          <Button type="submit" fullWidth={false} isLoading={isBusy}>
             Crea compte
           </Button>
         </form>
@@ -303,10 +305,10 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
               </option>
             ))}
           </select>
-          <Button type="button" className="w-auto" isLoading={isBusy} onClick={handleMoveSelected}>
+          <Button type="button" fullWidth={false} isLoading={isBusy} onClick={handleMoveSelected}>
             Mou
           </Button>
-          <Button type="button" variant="ghost" className="w-auto" onClick={clear}>
+          <Button type="button" variant="ghost" fullWidth={false} onClick={clear}>
             Cancel·la selecció
           </Button>
         </div>
@@ -314,15 +316,12 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
 
       {/* Professorat i les seves aules */}
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Professorat</h2>
+        <h2 className="heading-display text-lg font-bold text-foreground">Professorat</h2>
         {overview.teachers.length === 0 && (
           <p className="text-sm text-foreground-muted">Encara no hi ha cap professor.</p>
         )}
         {overview.teachers.map(({ teacher, classrooms }) => (
-          <div
-            key={teacher.id}
-            className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-background-elevated p-5"
-          >
+          <div key={teacher.id} className="panel-glass flex flex-col gap-3 p-5">
             <ul>
               <UserActionRow
                 user={teacher}
@@ -350,7 +349,7 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
               <Button
                 type="button"
                 variant="secondary"
-                className="w-auto"
+                fullWidth={false}
                 disabled={isBusy}
                 onClick={() => handleCreateClassroomForTeacher(teacher.id)}
               >
@@ -375,7 +374,8 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
                       <Button
                         type="button"
                         variant="ghost"
-                        className="w-auto text-xs text-danger"
+                        fullWidth={false}
+                        className="text-xs text-danger"
                         disabled={isBusy}
                         onClick={() => handleDeleteClassroom(classroom.id)}
                       >
@@ -409,8 +409,8 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
       </section>
 
       {/* Alumnat sense aula */}
-      <section className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-background-elevated p-5">
-        <h2 className="text-lg font-semibold">
+      <section className="panel-glass flex flex-col gap-3 p-5">
+        <h2 className="heading-display text-lg font-bold text-foreground">
           Alumnat sense aula{" "}
           <span className="text-sm font-normal text-foreground-muted">
             ({overview.unassignedStudents.length})
@@ -437,8 +437,8 @@ export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
       </section>
 
       {/* Administradors: només lectura */}
-      <section className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-background-elevated p-5">
-        <h2 className="text-lg font-semibold">Administradors</h2>
+      <section className="panel-glass flex flex-col gap-3 p-5">
+        <h2 className="heading-display text-lg font-bold text-foreground">Administradors</h2>
         <ul className="flex flex-col gap-2">
           {overview.admins.map((admin) => (
             <li key={admin.id} className="rounded-lg border border-border-subtle px-3 py-2 text-sm">

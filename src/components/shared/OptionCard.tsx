@@ -14,9 +14,9 @@ interface OptionCardProps {
 
 export function OptionCard({ title, description, href }: OptionCardProps) {
   const content = (
-    <div className="flex flex-col gap-2 rounded-2xl border border-border-subtle bg-background-elevated p-5">
+    <div className="panel-glass flex flex-col gap-2 p-5">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        <h2 className="heading-display text-lg font-bold text-foreground">{title}</h2>
         {!href && (
           <span className="rounded-full bg-border-subtle px-2 py-0.5 text-xs text-foreground-muted">
             Properament
@@ -32,7 +32,7 @@ export function OptionCard({ title, description, href }: OptionCardProps) {
   }
 
   return (
-    <Link href={href} className="transition-opacity hover:opacity-90">
+    <Link href={href} className="transition-colors hover:border-brand-primary [&>div]:hover:border-brand-primary">
       {content}
     </Link>
   );

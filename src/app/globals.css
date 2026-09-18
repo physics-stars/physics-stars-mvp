@@ -1,37 +1,101 @@
 @import "tailwindcss";
 
 /*
- * Paleta de colors del projecte "Physics Stars".
- * Tema fosc espacial (blau/indigo) amb un accent groc "estrella",
- * pensat perquè es reconegui fàcilment com a identitat del joc.
+ * Paleta i sistema visual de "Physics Stars".
+ *
+ * Un sol tema fosc d'aventura: fons "mitjanit", un únic color d'accent
+ * (ambre/groc, l'"estrella"), i un to "pergamí" per als panells de
+ * contingut destacat. Deliberadament NOMÉS aquests tres registres de
+ * color (fons fosc / accent / pergamí) perquè tota la interfície —
+ * landing, login, menús de joc, panells de professorat i administració—
+ * comparteixi una única identitat en lloc de barrejar paletes diferents
+ * per pantalla.
  */
 :root {
-  --background: #0b1020;
-  --background-elevated: #131a30;
-  --foreground: #eef1fa;
-  --foreground-muted: #9aa4c2;
-  --brand-primary: #5b6ee8;
-  --brand-primary-hover: #4a5ad0;
+  /* Fons fosc ("mitjanit") */
+  --background: #0b0f1a;
+  --background-elevated: #141a2a;
+  --background-elevated-strong: #1b2338;
+  --foreground: #f2ede1;
+  --foreground-muted: #a79c88;
+
+  /* Accent únic (ambre/groc) */
+  --brand-primary: #e8a23c;
+  --brand-primary-hover: #d38f2c;
   --brand-accent: #f7c948;
-  --border-subtle: #232b48;
-  --danger: #f27272;
+
+  /* Pergamí (panells de contingut destacat: login, detall de món/nivell) */
+  --parchment: #f3e9d2;
+  --parchment-elevated: #ece0c4;
+  --parchment-ink: #3a2c1e;
+  --parchment-ink-muted: #6b5842;
+  --parchment-border: #cbb98d;
+
+  --border-subtle: #262d42;
+  --danger: #e0665a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-background-elevated: var(--background-elevated);
+  --color-background-elevated-strong: var(--background-elevated-strong);
   --color-foreground: var(--foreground);
   --color-foreground-muted: var(--foreground-muted);
   --color-brand-primary: var(--brand-primary);
   --color-brand-primary-hover: var(--brand-primary-hover);
   --color-brand-accent: var(--brand-accent);
+  --color-parchment: var(--parchment);
+  --color-parchment-elevated: var(--parchment-elevated);
+  --color-parchment-ink: var(--parchment-ink);
+  --color-parchment-ink-muted: var(--parchment-ink-muted);
+  --color-parchment-border: var(--parchment-border);
   --color-border-subtle: var(--border-subtle);
   --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-cinzel);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+@layer components {
+  /*
+   * Panell "de vidre" fosc: llistes, targetes de dashboard, contingut
+   * de professorat/administració. Un sol tractament reutilitzat arreu
+   * en lloc de barrejar diversos estils de targeta.
+   */
+  .panel-glass {
+    @apply relative rounded-2xl border border-border-subtle bg-background-elevated/90 backdrop-blur-sm;
+  }
+
+  /*
+   * Panell "de pergamí": contingut destacat sobre fons clar (targeta de
+   * login, detall de món/nivell seleccionat). Text sempre en tons
+   * "ink" (mai el `foreground` clar del tema fosc) per contrast correcte.
+   */
+  .panel-parchment {
+    @apply relative rounded-2xl border-2 border-parchment-border bg-parchment text-parchment-ink shadow-[0_20px_50px_-15px_rgba(0,0,0,0.7)];
+  }
+
+  .heading-display {
+    @apply font-display tracking-wide;
+  }
+
+  /* Etiqueta petita "eyebrow" que precedeix un títol de secció. */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-primary;
+  }
+
+  /* Resplendor ambient discreta darrere d'un element (hero, CTA). */
+  .glow-accent {
+    @apply pointer-events-none absolute rounded-full blur-3xl;
+    background: radial-gradient(circle, color-mix(in srgb, var(--brand-primary) 35%, transparent) 0%, transparent 70%);
+  }
+
+  .divider-glow {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-brand-primary/40 to-transparent;
+  }
 }

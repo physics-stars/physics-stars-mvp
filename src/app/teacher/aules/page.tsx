@@ -17,7 +17,7 @@ export default async function TeacherClassroomsPage() {
   return (
     <main className="flex flex-1 flex-col gap-6 px-4 py-10 sm:px-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Les meves aules</h1>
+        <h1 className="heading-display text-2xl font-bold text-foreground">Les meves aules</h1>
         <p className="text-sm text-foreground-muted">
           Gestiona l&apos;alumnat de les teves aules: mou-lo entre aules i
           reinicia contrasenyes quan calgui.
