@@ -23,7 +23,19 @@ export function useStudentSelection() {
     });
   }, []);
 
+  // Selecciona o deselecciona un grup sencer (p. ex. "tota l'aula").
+  const setMany = useCallback((ids: string[], selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
   const clear = useCallback(() => setSelectedIds(new Set()), []);
 
-  return { selectedIds, toggle, clear };
+  return { selectedIds, toggle, setMany, clear };
 }

@@ -3,36 +3,38 @@
 /*
  * Paleta i sistema visual de "Physics Stars".
  *
- * Un sol tema fosc d'aventura: fons "mitjanit", un únic color d'accent
- * (ambre/groc, l'"estrella"), i un to "pergamí" per als panells de
- * contingut destacat. Deliberadament NOMÉS aquests tres registres de
- * color (fons fosc / accent / pergamí) perquè tota la interfície —
- * landing, login, menús de joc, panells de professorat i administració—
- * comparteixi una única identitat en lloc de barrejar paletes diferents
- * per pantalla.
+ * Tema clar "pergamí i fusta": el pergamí (càlid, clar) és la superfície
+ * dominant de tota la interfície; la fusta (bruna, més fosca) s'usa
+ * només per emmarcar (capçalera, peu de pàgina, vores) i l'ambre és un
+ * accent puntual (botons principals, petits detalls), MAI el color
+ * dominant d'una superfície gran ni del text de cada títol. Landing,
+ * login, menús de joc i panells de professorat/administració comparteixen
+ * exactament aquesta mateixa paleta.
  */
 :root {
-  /* Fons fosc ("mitjanit") */
-  --background: #0b0f1a;
-  --background-elevated: #141a2a;
-  --background-elevated-strong: #1b2338;
-  --foreground: #f2ede1;
-  --foreground-muted: #a79c88;
+  /* Pergamí (superfície dominant, clara) */
+  --background: #f1e5c8;
+  --background-elevated: #e8d8b2;
+  --background-elevated-strong: #ddc89a;
+  --foreground: #3b2c1d;
+  --foreground-muted: #71604a;
 
-  /* Accent únic (ambre/groc) */
-  --brand-primary: #e8a23c;
-  --brand-primary-hover: #d38f2c;
-  --brand-accent: #f7c948;
+  /* Fusta (emmarcat: capçalera, peu, vores destacades) */
+  --wood: #5a4128;
+  --wood-dark: #35281a;
+  --wood-light: #8a6b46;
 
-  /* Pergamí (panells de contingut destacat: login, detall de món/nivell) */
-  --parchment: #f3e9d2;
-  --parchment-elevated: #ece0c4;
-  --parchment-ink: #3a2c1e;
-  --parchment-ink-muted: #6b5842;
-  --parchment-border: #cbb98d;
+  /* Accent puntual (ambre) — només botons principals i petits detalls */
+  --brand-primary: #bf7e2e;
+  --brand-primary-hover: #a56a26;
+  --brand-accent: #d59a3d;
 
-  --border-subtle: #262d42;
-  --danger: #e0665a;
+  /* Pergamí "especial": targetes destacades (login, detall de món/nivell) */
+  --parchment: #f9f1dc;
+  --parchment-border: #b99b66;
+
+  --border-subtle: #cfba86;
+  --danger: #a8402f;
 }
 
 @theme inline {
@@ -41,13 +43,13 @@
   --color-background-elevated-strong: var(--background-elevated-strong);
   --color-foreground: var(--foreground);
   --color-foreground-muted: var(--foreground-muted);
+  --color-wood: var(--wood);
+  --color-wood-dark: var(--wood-dark);
+  --color-wood-light: var(--wood-light);
   --color-brand-primary: var(--brand-primary);
   --color-brand-primary-hover: var(--brand-primary-hover);
   --color-brand-accent: var(--brand-accent);
   --color-parchment: var(--parchment);
-  --color-parchment-elevated: var(--parchment-elevated);
-  --color-parchment-ink: var(--parchment-ink);
-  --color-parchment-ink-muted: var(--parchment-ink-muted);
   --color-parchment-border: var(--parchment-border);
   --color-border-subtle: var(--border-subtle);
   --color-danger: var(--danger);
@@ -63,39 +65,64 @@ body {
 
 @layer components {
   /*
-   * Panell "de vidre" fosc: llistes, targetes de dashboard, contingut
-   * de professorat/administració. Un sol tractament reutilitzat arreu
-   * en lloc de barrejar diversos estils de targeta.
+   * Targeta "normal": llistes, targetes de dashboard, contingut de
+   * professorat/administració. Un sol tractament reutilitzat arreu.
    */
   .panel-glass {
-    @apply relative rounded-2xl border border-border-subtle bg-background-elevated/90 backdrop-blur-sm;
+    @apply relative rounded-2xl border border-border-subtle bg-background-elevated;
   }
 
   /*
-   * Panell "de pergamí": contingut destacat sobre fons clar (targeta de
-   * login, detall de món/nivell seleccionat). Text sempre en tons
-   * "ink" (mai el `foreground` clar del tema fosc) per contrast correcte.
+   * Panell "de pergamí especial": contingut destacat (targeta de login,
+   * detall de món/nivell seleccionat). Una mica més clar que el fons,
+   * amb una vora doble que evoca el cantell d'un full de pergamí real.
    */
   .panel-parchment {
-    @apply relative rounded-2xl border-2 border-parchment-border bg-parchment text-parchment-ink shadow-[0_20px_50px_-15px_rgba(0,0,0,0.7)];
+    @apply relative rounded-xl border-4 border-double border-parchment-border bg-parchment text-foreground shadow-[0_16px_40px_-18px_rgba(53,40,26,0.45)];
+  }
+
+  /* Franja de fusta: capçalera i peu de pàgina, arreu de l'aplicació. */
+  .band-wood {
+    @apply bg-wood-dark text-parchment;
   }
 
   .heading-display {
     @apply font-display tracking-wide;
   }
 
-  /* Etiqueta petita "eyebrow" que precedeix un títol de secció. */
+  /* Etiqueta petita "eyebrow" que precedeix un títol de secció. Bruna,
+     no ambre: l'accent es reserva per a elements interactius. */
   .eyebrow {
-    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-primary;
-  }
-
-  /* Resplendor ambient discreta darrere d'un element (hero, CTA). */
-  .glow-accent {
-    @apply pointer-events-none absolute rounded-full blur-3xl;
-    background: radial-gradient(circle, color-mix(in srgb, var(--brand-primary) 35%, transparent) 0%, transparent 70%);
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-wood;
   }
 
   .divider-glow {
-    @apply h-px w-full bg-gradient-to-r from-transparent via-brand-primary/40 to-transparent;
+    @apply h-px w-full bg-gradient-to-r from-transparent via-wood-light/50 to-transparent;
+  }
+
+  /*
+   * Via fèrria decorativa per al roadmap: dos rails i travesses,
+   * fetes només amb gradients CSS (sense cap imatge de textura externa).
+   */
+  .rail-track {
+    @apply relative;
+    background-image: repeating-linear-gradient(
+      180deg,
+      var(--wood) 0px,
+      var(--wood) 5px,
+      transparent 5px,
+      transparent 22px
+    );
+  }
+  .rail-track::before,
+  .rail-track::after {
+    content: "";
+    @apply absolute inset-y-0 w-[3px] bg-wood-light;
+  }
+  .rail-track::before {
+    left: 2px;
+  }
+  .rail-track::after {
+    right: 2px;
   }
 }

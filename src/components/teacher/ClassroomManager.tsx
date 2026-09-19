@@ -1,222 +1,217 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { GraduationCap, KeyRound, Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { PasswordRevealBanner } from "@/components/shared/PasswordRevealBanner";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Notice } from "@/components/ui/Notice";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatCard } from "@/components/ui/StatCard";
+import { ClassroomBlock } from "@/components/management/ClassroomBlock";
+import { CredentialsPanel } from "@/components/management/CredentialsPanel";
+import { SelectionBar } from "@/components/management/SelectionBar";
+import { useManagementAction } from "@/components/management/use-management-action";
 import { useStudentSelection } from "@/components/shared/use-student-selection";
+import type { CredentialRow } from "@/lib/utils/credentials-file";
 import { deleteJson, postJson } from "@/lib/utils/api-client";
 import type { ClassroomView } from "@/server/repositories/classroom-repository";
+import type { ManagedUserView } from "@/server/repositories/user-repository";
 
 /*
- * Gestor d'aules del professorat (component de client): crear/eliminar
- * aules pròpies, moure alumnat entre elles (selecció múltiple) i
- * reiniciar contrasenyes. Cada acció crida la ruta API corresponent i
- * refresca les dades del servidor amb `router.refresh()` en lloc de
- * mantenir un estat local complex sincronitzat a mà.
+ * Gestor d'aules del professorat: crear/eliminar aules, moure alumnat
+ * entre elles i reiniciar contrasenyes (que es mostren una sola vegada,
+ * amb opció de descarregar-les). Mateix llenguatge visual que la vista
+ * global d'administració, però limitat a les aules del propi professor.
  */
 interface ClassroomManagerProps {
   initialClassrooms: ClassroomView[];
 }
 
+interface Credentials {
+  title: string;
+  rows: CredentialRow[];
+  fileLabel: string;
+}
+
 export function ClassroomManager({ initialClassrooms }: ClassroomManagerProps) {
-  const router = useRouter();
-  const { selectedIds, toggle, clear } = useStudentSelection();
+  const { isBusy, notice, dismissNotice, run } = useManagementAction();
+  const { selectedIds, toggle, setMany, clear } = useStudentSelection();
 
-  const [newClassroomName, setNewClassroomName] = useState("");
-  const [moveTargetId, setMoveTargetId] = useState<string>("");
-  const [isBusy, setIsBusy] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [revealedPassword, setRevealedPassword] = useState<{
-    username: string;
-    plainPassword: string;
-  } | null>(null);
+  const [newName, setNewName] = useState("");
+  const [moveTarget, setMoveTarget] = useState("");
+  const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [toDelete, setToDelete] = useState<ClassroomView | null>(null);
 
-  const classrooms = initialClassrooms;
+  const totalStudents = initialClassrooms.reduce((sum, c) => sum + c.students.length, 0);
 
-  async function handleCreateClassroom(event: FormEvent<HTMLFormElement>) {
+  async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setErrorMessage(null);
-    setIsBusy(true);
-
-    const result = await postJson("/api/teacher/classrooms", { name: newClassroomName });
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    setNewClassroomName("");
-    router.refresh();
-  }
-
-  async function handleDeleteClassroom(classroomId: string) {
-    setErrorMessage(null);
-    setIsBusy(true);
-
-    const result = await deleteJson(`/api/teacher/classrooms/${classroomId}`);
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    router.refresh();
-  }
-
-  async function handleMoveSelected() {
-    setErrorMessage(null);
-    setIsBusy(true);
-
-    const result = await postJson("/api/teacher/students/move", {
-      studentIds: Array.from(selectedIds),
-      classroomId: moveTargetId === "" ? null : moveTargetId,
+    const name = newName.trim();
+    const ok = await run(() => postJson("/api/teacher/classrooms", { name }), {
+      successMessage: `Aula «${name}» creada.`,
     });
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    clear();
-    setMoveTargetId("");
-    router.refresh();
+    if (ok) setNewName("");
   }
 
-  async function handleResetPassword(studentId: string, username: string) {
-    setErrorMessage(null);
-    setIsBusy(true);
+  async function confirmDelete() {
+    if (!toDelete) return;
+    const classroom = toDelete;
+    setToDelete(null);
+    await run(() => deleteJson(`/api/teacher/classrooms/${classroom.id}`), {
+      successMessage: `Aula «${classroom.name}» eliminada.`,
+    });
+  }
 
-    const result = await postJson<{ plainPassword: string }>(
-      `/api/teacher/students/${studentId}/reset-password`,
+  async function moveSelected() {
+    const count = selectedIds.size;
+    const ok = await run(
+      () =>
+        postJson("/api/teacher/students/move", {
+          studentIds: Array.from(selectedIds),
+          classroomId: moveTarget === "" ? null : moveTarget,
+        }),
+      { successMessage: `${count} ${count === 1 ? "alumne mogut" : "alumnes moguts"}.` },
     );
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
+    if (ok) {
+      clear();
+      setMoveTarget("");
     }
-    setRevealedPassword({ username, plainPassword: result.data.plainPassword });
   }
+
+  function resetPassword(student: ManagedUserView) {
+    void run(
+      () => postJson<{ plainPassword: string }>(`/api/teacher/students/${student.id}/reset-password`),
+      {
+        refresh: false,
+        onSuccess: (data) =>
+          setCredentials({
+            title: "Contrasenya reiniciada",
+            rows: [{ displayName: student.displayName, username: student.username, password: data.plainPassword }],
+            fileLabel: student.username,
+          }),
+      },
+    );
+  }
+
+  function renderStudentActions(student: ManagedUserView) {
+    return (
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        fullWidth={false}
+        disabled={isBusy}
+        onClick={() => resetPassword(student)}
+        title="Genera una contrasenya nova"
+      >
+        <KeyRound className="h-3.5 w-3.5" />
+        Contrasenya
+      </Button>
+    );
+  }
+
+  const moveOptions = initialClassrooms.map((c) => ({ value: c.id, label: c.name }));
 
   return (
     <div className="flex flex-col gap-6">
-      {errorMessage && (
-        <p role="alert" className="text-sm text-danger">
-          {errorMessage}
-        </p>
-      )}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard icon={<GraduationCap className="h-5 w-5" />} value={initialClassrooms.length} label="Aules" />
+        <StatCard icon={<Users className="h-5 w-5" />} value={totalStudents} label="Alumnat" />
+      </div>
 
-      {revealedPassword && (
-        <PasswordRevealBanner
-          username={revealedPassword.username}
-          plainPassword={revealedPassword.plainPassword}
-          onClose={() => setRevealedPassword(null)}
+      {notice && <Notice notice={notice} onDismiss={dismissNotice} />}
+
+      {credentials && (
+        <CredentialsPanel
+          title={credentials.title}
+          rows={credentials.rows}
+          classroomName={null}
+          fileLabel={credentials.fileLabel}
+          onClose={() => setCredentials(null)}
         />
       )}
 
-      <form onSubmit={handleCreateClassroom} className="flex flex-wrap items-end gap-3">
-        <div className="w-56">
-          <Input
-            id="new-classroom-name"
-            label="Nova aula"
-            placeholder="p. ex. 1r ESO A"
-            value={newClassroomName}
-            onChange={(event) => setNewClassroomName(event.target.value)}
-            required
+      <SectionCard
+        title="Les meves aules"
+        description="Selecciona alumnes per moure'ls d'una aula a una altra."
+        icon={<GraduationCap className="h-5 w-5" />}
+        actions={
+          <form onSubmit={handleCreate} className="flex flex-wrap items-center gap-2">
+            <input
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              placeholder="Nova aula (p. ex. 1r ESO A)"
+              aria-label="Nom de la nova aula"
+              required
+              className="w-56 max-w-full rounded-lg border border-border-subtle bg-background px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            />
+            <Button type="submit" size="sm" fullWidth={false} disabled={isBusy || !newName.trim()}>
+              <Plus className="h-4 w-4" />
+              Crea aula
+            </Button>
+          </form>
+        }
+      >
+        {initialClassrooms.length === 0 ? (
+          <EmptyState
+            title="Encara no tens cap aula"
+            description="Crea la primera amb el camp de dalt. Després l'administració hi podrà assignar alumnat."
           />
-        </div>
-        <Button type="submit" fullWidth={false} isLoading={isBusy}>
-          + Crea aula
-        </Button>
-      </form>
-
-      {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-primary bg-background-elevated p-4">
-          <span className="text-sm text-foreground">
-            {selectedIds.size} alumne(s) seleccionat(s)
-          </span>
-          <select
-            value={moveTargetId}
-            onChange={(event) => setMoveTargetId(event.target.value)}
-            className="rounded-lg border border-border-subtle bg-background px-3 py-2 text-sm text-foreground"
-          >
-            <option value="">Sense aula</option>
-            {classrooms.map((classroom) => (
-              <option key={classroom.id} value={classroom.id}>
-                {classroom.name}
-              </option>
-            ))}
-          </select>
-          <Button type="button" fullWidth={false} isLoading={isBusy} onClick={handleMoveSelected}>
-            Mou
-          </Button>
-          <Button type="button" variant="ghost" fullWidth={false} onClick={clear}>
-            Cancel·la selecció
-          </Button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {classrooms.map((classroom) => (
-          <section key={classroom.id} className="panel-glass flex flex-col gap-3 p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="heading-display text-lg font-bold text-foreground">
-                {classroom.name}{" "}
-                <span className="text-sm font-normal text-foreground-muted">
-                  ({classroom.students.length})
-                </span>
-              </h2>
-              <Button
-                type="button"
-                variant="ghost"
-                fullWidth={false}
-                className="text-danger"
-                onClick={() => handleDeleteClassroom(classroom.id)}
-                disabled={isBusy}
-              >
-                Elimina aula
-              </Button>
-            </div>
-
-            {classroom.students.length === 0 ? (
-              <p className="text-sm text-foreground-muted">Cap alumne en aquesta aula.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {classroom.students.map((student) => (
-                  <li
-                    key={student.id}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-border-subtle px-3 py-2"
+        ) : (
+          <div className="flex flex-col gap-3">
+            {initialClassrooms.map((classroom) => (
+              <ClassroomBlock
+                key={classroom.id}
+                classroom={classroom}
+                students={classroom.students}
+                selectedIds={selectedIds}
+                onToggleStudent={toggle}
+                onSetMany={setMany}
+                renderStudentActions={renderStudentActions}
+                headerActions={
+                  <Button
+                    type="button"
+                    variant="ghostDanger"
+                    size="sm"
+                    fullWidth={false}
+                    disabled={isBusy}
+                    onClick={() => setToDelete(classroom)}
                   >
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(student.id)}
-                        onChange={() => toggle(student.id)}
-                      />
-                      <span>
-                        {student.displayName}{" "}
-                        <span className="text-foreground-muted">({student.username})</span>
-                      </span>
-                    </label>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      fullWidth={false}
-                      className="text-xs"
-                      onClick={() => handleResetPassword(student.id, student.username)}
-                      disabled={isBusy}
-                    >
-                      Reinicia contrasenya
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ))}
-      </div>
+                    <Trash2 className="h-4 w-4" />
+                    Elimina
+                  </Button>
+                }
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      {selectedIds.size > 0 && <div className="h-16" />}
+
+      <SelectionBar
+        count={selectedIds.size}
+        options={moveOptions}
+        target={moveTarget}
+        onTargetChange={setMoveTarget}
+        onMove={moveSelected}
+        onClear={clear}
+        isBusy={isBusy}
+      />
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        title={`Eliminar l'aula «${toDelete?.name ?? ""}»?`}
+        description={
+          toDelete && toDelete.students.length > 0
+            ? `Els ${toDelete.students.length} alumnes quedaran «sense aula». Els comptes no s'esborren.`
+            : "L'aula està buida. Aquesta acció no es pot desfer."
+        }
+        confirmLabel="Elimina l'aula"
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }

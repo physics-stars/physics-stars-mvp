@@ -1,452 +1,348 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { Ban, CheckCircle2, GraduationCap, KeyRound, Search, ShieldCheck, UserX, Users } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { PasswordRevealBanner } from "@/components/shared/PasswordRevealBanner";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Notice } from "@/components/ui/Notice";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatCard } from "@/components/ui/StatCard";
+import { CredentialsPanel } from "@/components/management/CredentialsPanel";
+import { PersonRow } from "@/components/management/PersonRow";
+import { SelectionBar } from "@/components/management/SelectionBar";
+import { useManagementAction } from "@/components/management/use-management-action";
 import { useStudentSelection } from "@/components/shared/use-student-selection";
+import { CreateAccountsPanel, type CreatedCredentials } from "@/components/admin/CreateAccountsPanel";
+import { TeacherCard, type VisibleClassroom } from "@/components/admin/TeacherCard";
 import { deleteJson, patchJson, postJson } from "@/lib/utils/api-client";
-import type { GlobalOverview } from "@/server/services/admin-overview-service";
+import type { ClassroomView } from "@/server/repositories/classroom-repository";
 import type { ManagedUserView } from "@/server/repositories/user-repository";
+import type { GlobalOverview } from "@/server/services/admin-overview-service";
 
 /*
- * Gestor global d'usuaris i aules per a l'administració (component de
- * client): crear comptes de professorat/alumnat, (des)activar-los,
- * reiniciar contrasenyes, i crear/eliminar aules i moure alumnat entre
- * qualsevol professor. Mateix patró que `ClassroomManager` (accions via
- * API + `router.refresh()`), sense la restricció de "només les meves
- * aules" que sí té el professorat.
+ * Vista global d'administració. Estructura, de dalt a baix:
+ *  1. Resum (xifres clau)
+ *  2. Crear comptes (un o diversos alhora)
+ *  3. Professorat → aules → alumnat (amb cerca)
+ *  4. Alumnat sense aula
+ *  5. Administradors (només lectura)
+ * Les accions destructives demanen confirmació i les credencials
+ * generades es mostren una sola vegada (amb descàrrega en .txt).
  */
 interface GlobalUserManagerProps {
   overview: GlobalOverview;
 }
 
-// Fila reutilitzada per mostrar una persona (alumne o professor) amb
-// les seves accions: casella de selecció opcional, estat actiu/inactiu,
-// reiniciar contrasenya i activar/desactivar.
-function UserActionRow({
-  user,
-  selectable,
-  isSelected,
-  onToggleSelect,
-  onResetPassword,
-  onToggleActive,
-  disabled,
-}: {
-  user: ManagedUserView;
-  selectable: boolean;
-  isSelected?: boolean;
-  onToggleSelect?: () => void;
-  onResetPassword: () => void;
-  onToggleActive: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-subtle px-3 py-2">
-      <label className="flex items-center gap-2 text-sm">
-        {selectable && (
-          <input type="checkbox" checked={isSelected} onChange={onToggleSelect} />
-        )}
-        <span>
-          {user.displayName} <span className="text-foreground-muted">({user.username})</span>
-        </span>
-        {!user.isActive && (
-          <span className="rounded-full bg-danger/20 px-2 py-0.5 text-xs text-danger">
-            Desactivat
-          </span>
-        )}
-      </label>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          fullWidth={false}
-          className="text-xs"
-          onClick={onResetPassword}
-          disabled={disabled}
-        >
-          Reinicia contrasenya
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          fullWidth={false}
-          className="text-xs"
-          onClick={onToggleActive}
-          disabled={disabled}
-        >
-          {user.isActive ? "Desactiva" : "Activa"}
-        </Button>
-      </div>
-    </li>
-  );
+interface PendingConfirmation {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => void;
 }
 
 export function GlobalUserManager({ overview }: GlobalUserManagerProps) {
-  const router = useRouter();
-  const { selectedIds, toggle, clear } = useStudentSelection();
+  const { isBusy, notice, dismissNotice, run } = useManagementAction();
+  const { selectedIds, toggle, setMany, clear } = useStudentSelection();
 
-  const [isBusy, setIsBusy] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [revealedPassword, setRevealedPassword] = useState<{
-    username: string;
-    plainPassword: string;
-  } | null>(null);
+  const [query, setQuery] = useState("");
+  const [credentials, setCredentials] = useState<CreatedCredentials | null>(null);
+  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
+  const [moveTarget, setMoveTarget] = useState("");
 
-  const [newUserName, setNewUserName] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"STUDENT" | "TEACHER">("STUDENT");
-  const [newUserClassroomId, setNewUserClassroomId] = useState("");
+  const q = query.trim().toLowerCase();
+  const matches = (user: ManagedUserView) =>
+    !q || user.displayName.toLowerCase().includes(q) || user.username.toLowerCase().includes(q);
 
-  const [moveTargetId, setMoveTargetId] = useState("");
+  const totalClassrooms = overview.teachers.reduce((sum, t) => sum + t.classrooms.length, 0);
+  const studentsInClassrooms = overview.teachers.reduce(
+    (sum, t) => sum + t.classrooms.reduce((inner, c) => inner + c.students.length, 0),
+    0,
+  );
 
-  const [newClassroomNameByTeacher, setNewClassroomNameByTeacher] = useState<
-    Record<string, string>
-  >({});
+  // Jerarquia visible un cop aplicada la cerca: professor → aules → alumnat.
+  const visibleTeachers = useMemo(() => {
+    return overview.teachers
+      .map(({ teacher, classrooms }) => {
+        const teacherMatches = matches(teacher);
+        const visibleClassrooms: VisibleClassroom[] = classrooms
+          .map((classroom) => {
+            const classroomMatches = classroom.name.toLowerCase().includes(q);
+            const students =
+              !q || teacherMatches || classroomMatches
+                ? classroom.students
+                : classroom.students.filter(matches);
+            return { classroom, students };
+          })
+          .filter(({ classroom, students }) => !q || teacherMatches || students.length > 0 || classroom.name.toLowerCase().includes(q));
 
-  async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setErrorMessage(null);
-    setIsBusy(true);
+        const total = classrooms.reduce((sum, c) => sum + c.students.length, 0);
+        return { teacher, visibleClassrooms, total, show: !q || teacherMatches || visibleClassrooms.length > 0 };
+      })
+      .filter((entry) => entry.show);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overview.teachers, q]);
 
-    const result = await postJson<{
-      user: { username: string };
-      plainPassword: string;
-    }>("/api/admin/users", {
-      displayName: newUserName,
-      role: newUserRole,
-      classroomId: newUserRole === "STUDENT" && newUserClassroomId ? newUserClassroomId : null,
-    });
-    setIsBusy(false);
+  const visibleUnassigned = overview.unassignedStudents.filter(matches);
 
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    setRevealedPassword({
-      username: result.data.user.username,
-      plainPassword: result.data.plainPassword,
-    });
-    setNewUserName("");
-    setNewUserClassroomId("");
-    router.refresh();
+  const moveOptions = overview.allClassroomOptions.map((option) => ({
+    value: option.id,
+    label: `${option.name} — Prof. ${option.teacherName}`,
+  }));
+
+  // --- Accions ---
+
+  function askConfirmation(pending: PendingConfirmation) {
+    setConfirmation(pending);
   }
 
-  async function handleMoveSelected() {
-    setErrorMessage(null);
-    setIsBusy(true);
-
-    const result = await postJson("/api/admin/students/move", {
-      studentIds: Array.from(selectedIds),
-      classroomId: moveTargetId === "" ? null : moveTargetId,
+  function resetPassword(user: ManagedUserView) {
+    askConfirmation({
+      title: `Reiniciar la contrasenya de ${user.displayName}?`,
+      description:
+        "Se'n generarà una de nova i la contrasenya actual deixarà de funcionar. Es tancaran les seves sessions obertes.",
+      confirmLabel: "Reinicia",
+      onConfirm: async () => {
+        setConfirmation(null);
+        await run(() => postJson<{ plainPassword: string }>(`/api/admin/users/${user.id}/reset-password`), {
+          refresh: false,
+          onSuccess: (data) =>
+            setCredentials({
+              title: "Contrasenya reiniciada",
+              rows: [{ displayName: user.displayName, username: user.username, password: data.plainPassword }],
+              classroomName: null,
+              fileLabel: user.username,
+            }),
+        });
+      },
     });
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    clear();
-    setMoveTargetId("");
-    router.refresh();
   }
 
-  async function handleResetPassword(userId: string, username: string) {
-    setErrorMessage(null);
-    setIsBusy(true);
+  function toggleActive(user: ManagedUserView) {
+    void run(() => patchJson(`/api/admin/users/${user.id}/status`, { isActive: !user.isActive }), {
+      successMessage: user.isActive
+        ? `${user.displayName} ja no pot iniciar sessió.`
+        : `${user.displayName} torna a poder iniciar sessió.`,
+    });
+  }
 
-    const result = await postJson<{ plainPassword: string }>(
-      `/api/admin/users/${userId}/reset-password`,
+  function deleteClassroom(classroom: ClassroomView) {
+    askConfirmation({
+      title: `Eliminar l'aula «${classroom.name}»?`,
+      description:
+        classroom.students.length > 0
+          ? `Els ${classroom.students.length} alumnes que hi ha quedaran «sense aula». Els comptes no s'esborren.`
+          : "L'aula està buida. Aquesta acció no es pot desfer.",
+      confirmLabel: "Elimina l'aula",
+      onConfirm: async () => {
+        setConfirmation(null);
+        await run(() => deleteJson(`/api/admin/classrooms/${classroom.id}`), {
+          successMessage: `Aula «${classroom.name}» eliminada.`,
+        });
+      },
+    });
+  }
+
+  async function createClassroom(teacherId: string, name: string): Promise<boolean> {
+    return run(() => postJson("/api/admin/classrooms", { teacherId, name: name.trim() }), {
+      successMessage: `Aula «${name.trim()}» creada.`,
+    });
+  }
+
+  async function moveSelected() {
+    const count = selectedIds.size;
+    const ok = await run(
+      () =>
+        postJson("/api/admin/students/move", {
+          studentIds: Array.from(selectedIds),
+          classroomId: moveTarget === "" ? null : moveTarget,
+        }),
+      { successMessage: `${count} ${count === 1 ? "alumne mogut" : "alumnes moguts"}.` },
     );
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
+    if (ok) {
+      clear();
+      setMoveTarget("");
     }
-    setRevealedPassword({ username, plainPassword: result.data.plainPassword });
   }
 
-  async function handleToggleActive(userId: string, currentlyActive: boolean) {
-    setErrorMessage(null);
-    setIsBusy(true);
-
-    const result = await patchJson(`/api/admin/users/${userId}/status`, {
-      isActive: !currentlyActive,
-    });
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    router.refresh();
-  }
-
-  async function handleCreateClassroomForTeacher(teacherId: string) {
-    const name = newClassroomNameByTeacher[teacherId]?.trim();
-    if (!name) return;
-
-    setErrorMessage(null);
-    setIsBusy(true);
-
-    const result = await postJson("/api/admin/classrooms", { teacherId, name });
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    setNewClassroomNameByTeacher((prev) => ({ ...prev, [teacherId]: "" }));
-    router.refresh();
-  }
-
-  async function handleDeleteClassroom(classroomId: string) {
-    setErrorMessage(null);
-    setIsBusy(true);
-
-    const result = await deleteJson(`/api/admin/classrooms/${classroomId}`);
-    setIsBusy(false);
-
-    if (!result.ok) {
-      setErrorMessage(result.error);
-      return;
-    }
-    router.refresh();
+  function renderPersonActions(user: ManagedUserView) {
+    return (
+      <>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          fullWidth={false}
+          disabled={isBusy}
+          onClick={() => resetPassword(user)}
+          title="Genera una contrasenya nova"
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+          Contrasenya
+        </Button>
+        <Button
+          type="button"
+          variant={user.isActive ? "ghostDanger" : "ghost"}
+          size="sm"
+          fullWidth={false}
+          disabled={isBusy}
+          onClick={() => toggleActive(user)}
+          title={user.isActive ? "Impedeix que iniciï sessió" : "Permet que torni a iniciar sessió"}
+        >
+          {user.isActive ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+          {user.isActive ? "Desactiva" : "Activa"}
+        </Button>
+      </>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      {errorMessage && (
-        <p role="alert" className="text-sm text-danger">
-          {errorMessage}
-        </p>
-      )}
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard icon={<ShieldCheck className="h-5 w-5" />} value={overview.teachers.length} label="Professorat" />
+        <StatCard icon={<GraduationCap className="h-5 w-5" />} value={totalClassrooms} label="Aules" />
+        <StatCard
+          icon={<Users className="h-5 w-5" />}
+          value={studentsInClassrooms + overview.unassignedStudents.length}
+          label="Alumnat"
+        />
+        <StatCard icon={<UserX className="h-5 w-5" />} value={overview.unassignedStudents.length} label="Sense aula" />
+      </div>
 
-      {revealedPassword && (
-        <PasswordRevealBanner
-          username={revealedPassword.username}
-          plainPassword={revealedPassword.plainPassword}
-          onClose={() => setRevealedPassword(null)}
+      {notice && <Notice notice={notice} onDismiss={dismissNotice} />}
+
+      {credentials && (
+        <CredentialsPanel
+          title={credentials.title}
+          rows={credentials.rows}
+          classroomName={credentials.classroomName}
+          fileLabel={credentials.fileLabel}
+          onClose={() => setCredentials(null)}
         />
       )}
 
-      {/* Crear compte nou */}
-      <section className="panel-glass flex flex-col gap-3 p-5">
-        <h2 className="heading-display text-lg font-bold text-foreground">+ Nou usuari</h2>
-        <form onSubmit={handleCreateUser} className="flex flex-wrap items-end gap-3">
-          <div className="w-56">
-            <Input
-              id="new-user-name"
-              label="Nom i cognoms"
-              value={newUserName}
-              onChange={(event) => setNewUserName(event.target.value)}
-              required
+      <CreateAccountsPanel classroomOptions={overview.allClassroomOptions} onCreated={setCredentials} />
+
+      <SectionCard
+        id="professorat"
+        title="Professorat i aules"
+        description="Cada professor amb les seves aules i el seu alumnat. Selecciona alumnes per moure'ls."
+        icon={<GraduationCap className="h-5 w-5" />}
+        actions={
+          <label className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-muted" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Cerca per nom, usuari o aula…"
+              aria-label="Cerca persones i aules"
+              className="w-64 max-w-full rounded-lg border border-border-subtle bg-background py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-foreground-muted/60 focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="new-user-role" className="text-sm font-medium text-foreground-muted">
-              Rol
-            </label>
-            <select
-              id="new-user-role"
-              value={newUserRole}
-              onChange={(event) => setNewUserRole(event.target.value as "STUDENT" | "TEACHER")}
-              className="rounded-lg border border-border-subtle bg-background px-3 py-2.5 text-sm text-foreground"
-            >
-              <option value="STUDENT">Alumne</option>
-              <option value="TEACHER">Professor/a</option>
-            </select>
-          </div>
-          {newUserRole === "STUDENT" && (
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="new-user-classroom"
-                className="text-sm font-medium text-foreground-muted"
-              >
-                Aula (opcional)
-              </label>
-              <select
-                id="new-user-classroom"
-                value={newUserClassroomId}
-                onChange={(event) => setNewUserClassroomId(event.target.value)}
-                className="rounded-lg border border-border-subtle bg-background px-3 py-2.5 text-sm text-foreground"
-              >
-                <option value="">Sense aula</option>
-                {overview.allClassroomOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name} (Prof. {option.teacherName})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <Button type="submit" fullWidth={false} isLoading={isBusy}>
-            Crea compte
-          </Button>
-        </form>
-      </section>
-
-      {/* Barra de moviment d'alumnat seleccionat */}
-      {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-primary bg-background-elevated p-4">
-          <span className="text-sm text-foreground">
-            {selectedIds.size} alumne(s) seleccionat(s)
-          </span>
-          <select
-            value={moveTargetId}
-            onChange={(event) => setMoveTargetId(event.target.value)}
-            className="rounded-lg border border-border-subtle bg-background px-3 py-2 text-sm text-foreground"
-          >
-            <option value="">Sense aula</option>
-            {overview.allClassroomOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name} (Prof. {option.teacherName})
-              </option>
-            ))}
-          </select>
-          <Button type="button" fullWidth={false} isLoading={isBusy} onClick={handleMoveSelected}>
-            Mou
-          </Button>
-          <Button type="button" variant="ghost" fullWidth={false} onClick={clear}>
-            Cancel·la selecció
-          </Button>
-        </div>
-      )}
-
-      {/* Professorat i les seves aules */}
-      <section className="flex flex-col gap-4">
-        <h2 className="heading-display text-lg font-bold text-foreground">Professorat</h2>
-        {overview.teachers.length === 0 && (
-          <p className="text-sm text-foreground-muted">Encara no hi ha cap professor.</p>
-        )}
-        {overview.teachers.map(({ teacher, classrooms }) => (
-          <div key={teacher.id} className="panel-glass flex flex-col gap-3 p-5">
-            <ul>
-              <UserActionRow
-                user={teacher}
-                selectable={false}
-                onResetPassword={() => handleResetPassword(teacher.id, teacher.username)}
-                onToggleActive={() => handleToggleActive(teacher.id, teacher.isActive)}
-                disabled={isBusy}
-              />
-            </ul>
-
-            <div className="flex flex-wrap items-end gap-3 pl-3">
-              <div className="w-48">
-                <Input
-                  id={`new-classroom-${teacher.id}`}
-                  label="Nova aula per a aquest professor"
-                  value={newClassroomNameByTeacher[teacher.id] ?? ""}
-                  onChange={(event) =>
-                    setNewClassroomNameByTeacher((prev) => ({
-                      ...prev,
-                      [teacher.id]: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                fullWidth={false}
-                disabled={isBusy}
-                onClick={() => handleCreateClassroomForTeacher(teacher.id)}
-              >
-                + Crea aula
-              </Button>
-            </div>
-
-            {classrooms.length > 0 && (
-              <div className="flex flex-col gap-3 pl-3">
-                {classrooms.map((classroom) => (
-                  <div
-                    key={classroom.id}
-                    className="flex flex-col gap-2 rounded-xl border border-border-subtle p-4"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="font-medium">
-                        {classroom.name}{" "}
-                        <span className="text-sm font-normal text-foreground-muted">
-                          ({classroom.students.length})
-                        </span>
-                      </h3>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        fullWidth={false}
-                        className="text-xs text-danger"
-                        disabled={isBusy}
-                        onClick={() => handleDeleteClassroom(classroom.id)}
-                      >
-                        Elimina aula
-                      </Button>
-                    </div>
-                    {classroom.students.length === 0 ? (
-                      <p className="text-sm text-foreground-muted">Cap alumne en aquesta aula.</p>
-                    ) : (
-                      <ul className="flex flex-col gap-2">
-                        {classroom.students.map((student) => (
-                          <UserActionRow
-                            key={student.id}
-                            user={student}
-                            selectable
-                            isSelected={selectedIds.has(student.id)}
-                            onToggleSelect={() => toggle(student.id)}
-                            onResetPassword={() => handleResetPassword(student.id, student.username)}
-                            onToggleActive={() => handleToggleActive(student.id, student.isActive)}
-                            disabled={isBusy}
-                          />
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </section>
-
-      {/* Alumnat sense aula */}
-      <section className="panel-glass flex flex-col gap-3 p-5">
-        <h2 className="heading-display text-lg font-bold text-foreground">
-          Alumnat sense aula{" "}
-          <span className="text-sm font-normal text-foreground-muted">
-            ({overview.unassignedStudents.length})
-          </span>
-        </h2>
-        {overview.unassignedStudents.length === 0 ? (
-          <p className="text-sm text-foreground-muted">Tot l&apos;alumnat té aula assignada.</p>
+          </label>
+        }
+      >
+        {visibleTeachers.length === 0 ? (
+          <EmptyState
+            title={q ? "Cap resultat" : "Encara no hi ha professorat"}
+            description={q ? "Prova amb un altre nom, usuari o aula." : "Crea el primer professor amb el formulari de dalt."}
+          />
         ) : (
-          <ul className="flex flex-col gap-2">
-            {overview.unassignedStudents.map((student) => (
-              <UserActionRow
-                key={student.id}
-                user={student}
-                selectable
-                isSelected={selectedIds.has(student.id)}
-                onToggleSelect={() => toggle(student.id)}
-                onResetPassword={() => handleResetPassword(student.id, student.username)}
-                onToggleActive={() => handleToggleActive(student.id, student.isActive)}
-                disabled={isBusy}
+          <div className="flex flex-col gap-4">
+            {visibleTeachers.map(({ teacher, visibleClassrooms, total }) => (
+              <TeacherCard
+                key={teacher.id}
+                teacher={teacher}
+                classrooms={visibleClassrooms}
+                totalStudents={total}
+                forceOpen={Boolean(q)}
+                isBusy={isBusy}
+                selectedIds={selectedIds}
+                onToggleStudent={toggle}
+                onSetMany={setMany}
+                renderPersonActions={renderPersonActions}
+                onCreateClassroom={createClassroom}
+                onDeleteClassroom={deleteClassroom}
               />
             ))}
-          </ul>
+          </div>
         )}
-      </section>
+      </SectionCard>
 
-      {/* Administradors: només lectura */}
-      <section className="panel-glass flex flex-col gap-3 p-5">
-        <h2 className="heading-display text-lg font-bold text-foreground">Administradors</h2>
+      <SectionCard
+        id="sense-aula"
+        title="Alumnat sense aula"
+        description="Alumnes que encara no són a cap aula. Selecciona'ls per assignar-los-en una."
+        icon={<UserX className="h-5 w-5" />}
+        actions={<Badge tone={overview.unassignedStudents.length > 0 ? "accent" : "neutral"}>{overview.unassignedStudents.length}</Badge>}
+      >
+        {visibleUnassigned.length === 0 ? (
+          <EmptyState
+            title={q ? "Cap resultat" : "Tot l'alumnat té aula"}
+            description={q ? undefined : "Quan creïs comptes sense aula, apareixeran aquí."}
+          />
+        ) : (
+          <>
+            <label className="mb-3 flex cursor-pointer items-center gap-2 text-xs text-foreground-muted">
+              <input
+                type="checkbox"
+                checked={visibleUnassigned.every((s) => selectedIds.has(s.id))}
+                onChange={(event) => setMany(visibleUnassigned.map((s) => s.id), event.target.checked)}
+                className="h-3.5 w-3.5 accent-[var(--wood)]"
+              />
+              Selecciona tot
+            </label>
+            <ul className="flex flex-col gap-2">
+              {visibleUnassigned.map((student) => (
+                <PersonRow
+                  key={student.id}
+                  user={student}
+                  selectable
+                  selected={selectedIds.has(student.id)}
+                  onToggleSelect={() => toggle(student.id)}
+                  actions={renderPersonActions(student)}
+                />
+              ))}
+            </ul>
+          </>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        id="administradors"
+        title="Administradors"
+        description="Només lectura: els comptes d'administració no es gestionen des d'aquí."
+        icon={<ShieldCheck className="h-5 w-5" />}
+      >
         <ul className="flex flex-col gap-2">
           {overview.admins.map((admin) => (
-            <li key={admin.id} className="rounded-lg border border-border-subtle px-3 py-2 text-sm">
-              {admin.displayName} <span className="text-foreground-muted">({admin.username})</span>
-            </li>
+            <PersonRow key={admin.id} user={admin} />
           ))}
         </ul>
-      </section>
+      </SectionCard>
+
+      {/* Espai perquè la barra flotant no tapi l'últim contingut. */}
+      {selectedIds.size > 0 && <div className="h-16" />}
+
+      <SelectionBar
+        count={selectedIds.size}
+        options={moveOptions}
+        target={moveTarget}
+        onTargetChange={setMoveTarget}
+        onMove={moveSelected}
+        onClear={clear}
+        isBusy={isBusy}
+      />
+
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={confirmation?.title ?? ""}
+        description={confirmation?.description ?? ""}
+        confirmLabel={confirmation?.confirmLabel}
+        onConfirm={() => confirmation?.onConfirm()}
+        onCancel={() => setConfirmation(null)}
+      />
     </div>
   );
 }

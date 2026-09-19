@@ -34,7 +34,11 @@ function getPrismaClient(): PrismaClient {
 // (p. ex. `prisma.user.findUnique(...)`), en lloc de crear-lo en
 // importar aquest mòdul.
 export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
-  get(_target, property, receiver) {
-    return Reflect.get(getPrismaClient() as object, property, receiver);
+  get(_target, property) {
+    const client = getPrismaClient();
+    const value = Reflect.get(client as object, property, client);
+    // Els mètodes (p. ex. `$transaction`) s'han d'executar amb el client
+    // real com a `this`, no amb aquest proxy.
+    return typeof value === "function" ? value.bind(client) : value;
   },
 });

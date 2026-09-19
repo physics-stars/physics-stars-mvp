@@ -4,6 +4,7 @@ import {
   findClassroomsByTeacher,
   toClassroomView,
 } from "@/server/repositories/classroom-repository";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { ClassroomManager } from "@/components/teacher/ClassroomManager";
 
 export const metadata: Metadata = {
@@ -15,14 +16,11 @@ export default async function TeacherClassroomsPage() {
   const classrooms = await findClassroomsByTeacher(user.id);
 
   return (
-    <main className="flex flex-1 flex-col gap-6 px-4 py-10 sm:px-8">
-      <div>
-        <h1 className="heading-display text-2xl font-bold text-foreground">Les meves aules</h1>
-        <p className="text-sm text-foreground-muted">
-          Gestiona l&apos;alumnat de les teves aules: mou-lo entre aules i
-          reinicia contrasenyes quan calgui.
-        </p>
-      </div>
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8">
+      <PageHeader
+        title="Les meves aules"
+        description="Gestiona l'alumnat de les teves aules: mou-lo entre aules i reinicia contrasenyes quan calgui."
+      />
 
       <ClassroomManager initialClassrooms={classrooms.map(toClassroomView)} />
     </main>

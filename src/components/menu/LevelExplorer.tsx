@@ -67,32 +67,32 @@ export function LevelExplorer({ worldName, levels }: LevelExplorerProps) {
         {selected && (
           <div className="panel-parchment flex flex-col gap-6 p-6 sm:p-8">
             <div>
-              <span className="eyebrow text-brand-primary/80">{worldName}</span>
-              <h2 className="heading-display mt-1 text-3xl font-bold text-parchment-ink">
+              <span className="eyebrow">{worldName}</span>
+              <h2 className="heading-display mt-1 text-3xl font-bold text-foreground">
                 Nivell {selected.levelNumber}: {selected.title}
               </h2>
             </div>
 
-            <div className="rounded-xl border border-parchment-border bg-white/30 p-4">
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-parchment-ink">
-                <ScrollText className="h-4 w-4" />
+            <div className="rounded-xl border border-parchment-border bg-background/50 p-4">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-foreground">
+                <ScrollText className="h-4 w-4 text-brand-primary" />
                 Briefing de la missió
               </h3>
-              <p className="leading-relaxed text-parchment-ink-muted">
+              <p className="leading-relaxed text-foreground-muted">
                 &ldquo;{selected.description}&rdquo;
               </p>
             </div>
 
             <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-parchment-border pt-5">
-              <span className="text-sm font-semibold text-parchment-ink-muted">
+              <span className="text-sm font-semibold text-foreground-muted">
                 Dificultat: {DIFFICULTY_LABELS[selected.difficulty]}
               </span>
               {selected.isAvailable ? (
-                <span className="inline-flex items-center gap-2 rounded-lg bg-parchment-ink/10 px-5 py-2.5 text-sm font-bold text-parchment-ink-muted">
+                <span className="inline-flex items-center gap-2 rounded-lg bg-foreground/10 px-5 py-2.5 text-sm font-bold text-foreground-muted">
                   Aviat disponible al joc
                 </span>
               ) : (
-                <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-parchment-ink/10 px-5 py-2.5 text-sm font-bold text-parchment-ink-muted">
+                <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-foreground/10 px-5 py-2.5 text-sm font-bold text-foreground-muted">
                   <Lock className="h-4 w-4" />
                   Bloquejat
                 </span>

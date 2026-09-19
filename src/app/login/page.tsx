@@ -22,10 +22,8 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-16">
-      <div className="glow-accent left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2" />
-
-      <div className="relative z-10 flex w-full max-w-md flex-col gap-8">
+    <main className="flex flex-1 flex-col items-center justify-center px-4 py-16">
+      <div className="flex w-full max-w-md flex-col gap-8">
         <div className="flex flex-col items-center gap-2 text-center">
           <Link href="/" className="flex items-center gap-2.5">
             <Image src="/logo.svg" alt="" width={36} height={36} />
