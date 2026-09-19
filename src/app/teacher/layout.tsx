@@ -18,7 +18,6 @@ export default async function TeacherLayout({ children }: { children: React.Reac
     <div className="flex flex-1 flex-col">
       <DashboardHeader
         displayName={user?.displayName ?? ""}
-        roleLabel="Professor/a"
         homeHref="/teacher"
       />
       <SubNav

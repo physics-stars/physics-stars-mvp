@@ -12,7 +12,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex flex-1 flex-col">
       <DashboardHeader
         displayName={user?.displayName ?? ""}
-        roleLabel="Administració"
         homeHref="/admin"
       />
       <SubNav
