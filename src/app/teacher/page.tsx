@@ -27,6 +27,11 @@ export default async function TeacherHomePage() {
           href="/teacher/aules"
         />
         <OptionCard
+          title="Contingut per aula"
+          description="Decideix quins mons i nivells veu l'alumnat de cada aula."
+          href="/teacher/contingut"
+        />
+        <OptionCard
           title="Progrés de l'alumnat"
           description="Segueix com avança cada alumne pels mons del joc."
         />

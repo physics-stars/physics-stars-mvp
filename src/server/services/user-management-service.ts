@@ -4,12 +4,15 @@ import { hashPassword } from "@/server/security/password";
 import {
   generatePlainPassword,
   generateUniqueUsername,
+  slugifyDisplayName,
 } from "@/server/security/credentials-generator";
 import { deleteAllSessionsForUser } from "@/server/repositories/session-repository";
 import { findClassroomById } from "@/server/repositories/classroom-repository";
 import {
   createUser,
+  createUsers,
   findUserById,
+  findUsernamesStartingWith,
   setUserActive as setUserActiveInDb,
   toPublicUser,
   updateUserPasswordHash,
@@ -61,6 +64,86 @@ export async function adminCreateUser(input: {
   });
 
   return { user: toPublicUser(user), plainPassword };
+}
+
+export interface BulkCreatedAccount {
+  username: string;
+  displayName: string;
+  plainPassword: string;
+}
+
+export interface BulkCreatedAccounts {
+  role: "TEACHER" | "STUDENT";
+  classroomName: string | null;
+  accounts: BulkCreatedAccount[];
+}
+
+// Hasheja les contrasenyes en lots petits: Argon2id és costós (memòria
+// i CPU) i així no es disparen totes a la vegada.
+async function hashInBatches(passwords: string[], batchSize = 8): Promise<string[]> {
+  const hashes: string[] = [];
+  for (let i = 0; i < passwords.length; i += batchSize) {
+    const batch = passwords.slice(i, i + batchSize);
+    hashes.push(...(await Promise.all(batch.map((password) => hashPassword(password)))));
+  }
+  return hashes;
+}
+
+// Escapa un text per fer-lo servir literalment dins una expressió regular.
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Crea diversos comptes alhora a partir d'un prefix: "Alumne 4A" i 3
+// comptes -> "Alumne 4A 1", "Alumne 4A 2", "Alumne 4A 3" (usuaris
+// "alumne.4a1"...). Si ja existeixen comptes amb aquest prefix, la
+// numeració continua a partir de l'últim en lloc de repetir-se.
+export async function adminCreateUsersBulk(input: {
+  role: "TEACHER" | "STUDENT";
+  prefix: string;
+  count: number;
+  classroomId?: string | null;
+}): Promise<BulkCreatedAccounts> {
+  const classroomId = input.role === "STUDENT" ? (input.classroomId ?? null) : null;
+
+  let classroomName: string | null = null;
+  if (classroomId !== null) {
+    const classroom = await findClassroomById(classroomId);
+    if (!classroom) {
+      throw new ValidationAppError("L'aula indicada no existeix.");
+    }
+    classroomName = classroom.name;
+  }
+
+  const base = slugifyDisplayName(input.prefix);
+  const numberPattern = new RegExp("^" + escapeRegExp(base) + "(\\d+)$");
+  const existing = await findUsernamesStartingWith(base);
+  const highest = existing.reduce((max, username) => {
+    const match = numberPattern.exec(username);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+
+  const numbers = Array.from({ length: input.count }, (_, index) => highest + index + 1);
+  const plainPasswords = numbers.map(() => generatePlainPassword());
+  const hashes = await hashInBatches(plainPasswords);
+
+  const accounts: BulkCreatedAccount[] = numbers.map((number, index) => ({
+    username: `${base}${number}`,
+    displayName: `${input.prefix} ${number}`,
+    plainPassword: plainPasswords[index],
+  }));
+
+  await createUsers(
+    accounts.map((account, index) => ({
+      username: account.username,
+      passwordHash: hashes[index],
+      displayName: account.displayName,
+      role: input.role,
+      classroomId,
+    })),
+  );
+
+  return { role: input.role, classroomName, accounts };
 }
 
 // Genera i desa una contrasenya nova per a un usuari ja existent, i

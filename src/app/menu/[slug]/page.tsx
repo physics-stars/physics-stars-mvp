@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/server/services/route-guards";
-import { findWorldBySlugWithLevels } from "@/server/repositories/world-repository";
+import { getCurrentUser } from "@/server/services/current-user";
+import { getWorldForStudent } from "@/server/services/content-visibility-service";
 import { LevelExplorer } from "@/components/menu/LevelExplorer";
 
 /*
@@ -13,14 +14,15 @@ export async function generateMetadata({
   params,
 }: PageProps<"/menu/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const world = await findWorldBySlugWithLevels(slug);
+  const user = await getCurrentUser();
+  const world = user ? await getWorldForStudent(user.id, slug) : null;
   return { title: world ? `${world.name} — Physics Stars` : "Món no trobat — Physics Stars" };
 }
 
 export default async function LevelMenuPage({ params }: PageProps<"/menu/[slug]">) {
-  await requireRole("STUDENT");
+  const user = await requireRole("STUDENT");
   const { slug } = await params;
-  const world = await findWorldBySlugWithLevels(slug);
+  const world = await getWorldForStudent(user.id, slug);
 
   if (!world) {
     notFound();

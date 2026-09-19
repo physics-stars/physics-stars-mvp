@@ -14,7 +14,9 @@ import {
   Compass,
   ArrowRight,
   CheckCircle2,
+  TrainFront,
 } from "lucide-react";
+import { clsx } from "@/lib/utils/clsx";
 import { Reveal } from "@/components/landing/Reveal";
 import { SectionHeading } from "@/components/landing/SectionHeading";
 
@@ -25,9 +27,9 @@ export const metadata: Metadata = {
 
 /*
  * Landing pública de Physics Stars. Contingut adaptat del prototip
- * original, amb un únic llenguatge visual (targetes "panel-glass",
- * una sola capçalera de secció) en lloc d'una metàfora diferent per
- * bloc de contingut.
+ * original, amb un únic llenguatge visual (pergamí clar + fusta per
+ * emmarcar + ambre només com a detall puntual) en lloc d'una metàfora
+ * diferent per bloc de contingut.
  */
 
 const MISSION_PILLARS = [
@@ -78,10 +80,12 @@ const FEATURES = [
   },
 ];
 
-const ROADMAP = [
+type RoadmapStatus = "completed" | "in_progress" | "upcoming";
+
+const ROADMAP: { phase: string; status: RoadmapStatus; items: string[] }[] = [
   {
     phase: "Fase 1: Pilot en paper a escoles",
-    status: "completed" as const,
+    status: "completed",
     items: [
       "Prova pilot en format paper testada en múltiples aules de 4t d'ESO.",
       "Validació de la metodologia i la narrativa.",
@@ -90,7 +94,7 @@ const ROADMAP = [
   },
   {
     phase: "Fase 2: MVP digital — Cinemàtica",
-    status: "in_progress" as const,
+    status: "in_progress",
     items: [
       "Implementació del primer món: Cinemàtica.",
       "Mecàniques base: narrativa, experiència d'usuari i sistema de pistes.",
@@ -99,7 +103,7 @@ const ROADMAP = [
   },
   {
     phase: "Fase 3: Primera versió completa",
-    status: "upcoming" as const,
+    status: "upcoming",
     items: [
       "Cerca d'inversors i socis per codesenvolupar.",
       "Desenvolupament d'una primera versió completa del producte.",
@@ -108,7 +112,7 @@ const ROADMAP = [
   },
   {
     phase: "Fase 4: Implementació i creixement",
-    status: "upcoming" as const,
+    status: "upcoming",
     items: [
       "Integració a les primeres escoles i inici de facturació.",
       "Millora constant basada en dades i valoracions del professorat.",
@@ -124,7 +128,7 @@ const TEAM = [
   { name: "Aissam Khadraoui", role: "Disseny i Experiència d'Usuari", photo: "/team/aissam.jpg" },
 ];
 
-const statusLabel: Record<(typeof ROADMAP)[number]["status"], string> = {
+const STATUS_LABEL: Record<RoadmapStatus, string> = {
   completed: "Completat",
   in_progress: "En curs",
   upcoming: "Properament",
@@ -151,17 +155,17 @@ export default function LandingPage() {
 
 function SiteNav() {
   return (
-    <nav className="fixed inset-x-0 top-0 z-50 bg-gradient-to-b from-background/95 to-transparent px-4 py-4 sm:px-8">
+    <nav className="band-wood fixed inset-x-0 top-0 z-50 px-4 py-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.18)] sm:px-8">
       <div className="mx-auto flex max-w-6xl items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/logo.svg" alt="" width={32} height={32} className="drop-shadow" />
-          <span className="heading-display text-lg font-bold tracking-wide text-foreground">
+          <Image src="/logo.svg" alt="" width={30} height={30} />
+          <span className="heading-display text-lg font-bold tracking-wide text-parchment">
             Physics Stars
           </span>
         </Link>
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-background-elevated/80 px-5 py-2 text-sm font-semibold text-foreground backdrop-blur-sm transition-colors hover:border-brand-primary hover:text-brand-primary"
+          className="inline-flex items-center gap-2 rounded-full border border-parchment/25 px-5 py-2 text-sm font-semibold text-parchment transition-colors hover:border-brand-primary hover:bg-brand-primary hover:text-wood-dark"
         >
           Accés
         </Link>
@@ -172,9 +176,15 @@ function SiteNav() {
 
 function Hero() {
   return (
-    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 text-center">
-      <div className="glow-accent left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2" />
-      <div className="relative z-10 flex max-w-3xl flex-col items-center gap-8">
+    <section className="relative flex min-h-screen flex-col items-center justify-center px-4 pt-20 text-center">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 50% at 50% 35%, var(--parchment) 0%, transparent 70%)",
+        }}
+      />
+      <div className="flex max-w-3xl flex-col items-center gap-8">
         <Reveal>
           <h1 className="heading-display text-5xl font-black leading-tight text-foreground sm:text-7xl">
             Pensa com un <span className="text-brand-primary">Científic</span>
@@ -188,7 +198,7 @@ function Hero() {
         <Reveal delay={0.2}>
           <Link
             href="/login"
-            className="group inline-flex items-center gap-3 rounded-xl bg-brand-primary px-8 py-4 text-lg font-bold text-parchment-ink shadow-[0_10px_30px_-8px_rgba(232,162,60,0.6)] transition-transform hover:-translate-y-0.5 hover:bg-brand-primary-hover"
+            className="group inline-flex items-center gap-3 rounded-xl bg-brand-primary px-8 py-4 text-lg font-bold text-wood-dark shadow-[0_10px_24px_-10px_rgba(53,40,26,0.5)] transition-transform hover:-translate-y-0.5 hover:bg-brand-primary-hover"
           >
             Comença l&apos;Aventura
             <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
@@ -196,7 +206,7 @@ function Hero() {
         </Reveal>
         <Reveal delay={0.3}>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-background-elevated/70 px-4 py-2 text-sm text-foreground-muted">
-            <Compass className="h-4 w-4 text-brand-primary" />
+            <Compass className="h-4 w-4 text-wood" />
             Fes scroll per conèixer Physics Stars
           </div>
         </Reveal>
@@ -220,7 +230,7 @@ function MissionSection() {
           {MISSION_PILLARS.map((pillar, index) => (
             <Reveal key={pillar.title} delay={index * 0.1}>
               <div className="panel-glass flex h-full flex-col gap-4 p-6">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-primary/15 text-brand-primary">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-wood/10 text-wood">
                   <pillar.icon className="h-6 w-6" />
                 </div>
                 <h3 className="heading-display text-xl font-bold text-foreground">
@@ -242,7 +252,7 @@ function FeaturesSection() {
   return (
     <section
       id="diferenciacio"
-      className="border-y border-border-subtle bg-background-elevated/40 px-4 py-24 sm:px-8"
+      className="border-y border-border-subtle bg-background-elevated/50 px-4 py-24 sm:px-8"
     >
       <div className="mx-auto flex max-w-6xl flex-col gap-14">
         <Reveal>
@@ -274,63 +284,79 @@ function FeaturesSection() {
   );
 }
 
+function StationMarker({ status }: { status: RoadmapStatus }) {
+  if (status === "in_progress") {
+    return (
+      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-brand-primary bg-parchment shadow-[0_0_0_5px_rgba(191,126,46,0.15)]">
+        <TrainFront className="h-5 w-5 text-brand-primary" />
+        <span className="absolute -left-17 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-brand-primary">
+          Som aquí
+        </span>
+      </div>
+    );
+  }
+  if (status === "completed") {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-wood bg-wood text-parchment">
+        <CheckCircle2 className="h-5 w-5" />
+      </div>
+    );
+  }
+  return (
+    <div className="h-10 w-10 shrink-0 rounded-full border-2 border-border-subtle bg-background" />
+  );
+}
+
 function RoadmapSection() {
   return (
     <section id="roadmap" className="px-4 py-24 sm:px-8">
-      <div className="mx-auto flex max-w-3xl flex-col gap-14">
+      <div className="mx-auto flex max-w-4xl flex-col gap-14">
         <Reveal>
           <SectionHeading eyebrow="Cap on anem" title="La jornada per endavant" />
         </Reveal>
 
-        <ol className="relative flex flex-col gap-8 border-l-2 border-border-subtle pl-8">
-          {ROADMAP.map((item, index) => (
-            <Reveal key={item.phase} delay={index * 0.08}>
-              <li className="relative">
-                <span
-                  className={`absolute -left-[calc(2rem+7px)] top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                    item.status === "in_progress"
-                      ? "border-brand-primary bg-brand-primary shadow-[0_0_12px_2px_rgba(232,162,60,0.6)]"
-                      : item.status === "completed"
-                        ? "border-brand-primary bg-background"
-                        : "border-border-subtle bg-background"
-                  }`}
-                >
-                  {item.status === "completed" && (
-                    <CheckCircle2 className="h-4 w-4 text-brand-primary" />
-                  )}
-                </span>
-                <div
-                  className={`panel-glass p-5 ${item.status === "upcoming" ? "opacity-60" : ""}`}
+        <div className="panel-parchment p-5 sm:p-10">
+          <ol className="relative flex flex-col gap-10 ml-9">
+            <div className="rail-track absolute left-5 top-2 bottom-2 w-4 -translate-x-1/2" />
+
+            {ROADMAP.map((item, index) => (
+              <li key={item.phase} className="relative flex gap-5">
+                <div className="relative z-10 flex w-10 shrink-0 justify-center">
+                  <StationMarker status={item.status} />
+                </div>
+
+                <Reveal
+                  delay={index * 0.08}
+                  className={clsx("min-w-0 flex-1", item.status === "upcoming" && "opacity-60")}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="heading-display text-base font-bold text-foreground">
                       {item.phase}
                     </h3>
                     <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
-                        item.status === "in_progress"
-                          ? "bg-brand-primary/20 text-brand-primary"
-                          : item.status === "completed"
-                            ? "bg-emerald-500/15 text-emerald-400"
-                            : "bg-border-subtle text-foreground-muted"
-                      }`}
+                      className={clsx(
+                        "rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
+                        item.status === "in_progress" && "bg-brand-primary/20 text-brand-primary",
+                        item.status === "completed" && "bg-emerald-600/15 text-emerald-700",
+                        item.status === "upcoming" && "bg-border-subtle/70 text-foreground-muted",
+                      )}
                     >
-                      {statusLabel[item.status]}
+                      {STATUS_LABEL[item.status]}
                     </span>
                   </div>
-                  <ul className="mt-3 flex flex-col gap-1.5">
+                  <ul className="mt-3 flex flex-col gap-1.5 rounded-xl bg-background/50 p-4">
                     {item.items.map((line) => (
                       <li key={line} className="flex items-start gap-2 text-sm text-foreground-muted">
-                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-primary/60" />
+                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-wood/60" />
                         {line}
                       </li>
                     ))}
                   </ul>
-                </div>
+                </Reveal>
               </li>
-            </Reveal>
-          ))}
-        </ol>
+            ))}
+          </ol>
+        </div>
       </div>
     </section>
   );
@@ -340,7 +366,7 @@ function TeamSection() {
   return (
     <section
       id="equip"
-      className="border-y border-border-subtle bg-background-elevated/40 px-4 py-24 sm:px-8"
+      className="border-y border-border-subtle bg-background-elevated/50 px-4 py-24 sm:px-8"
     >
       <div className="mx-auto flex max-w-6xl flex-col gap-14">
         <Reveal>
@@ -354,7 +380,7 @@ function TeamSection() {
           {TEAM.map((member, index) => (
             <Reveal key={member.name} delay={index * 0.08}>
               <div className="flex flex-col items-center gap-3 text-center">
-                <div className="relative h-28 w-28 overflow-hidden rounded-full ring-2 ring-brand-primary/50 sm:h-32 sm:w-32">
+                <div className="relative h-28 w-28 overflow-hidden rounded-full ring-4 ring-background-elevated-strong sm:h-32 sm:w-32">
                   <Image
                     src={member.photo}
                     alt={member.name}
@@ -390,25 +416,23 @@ function ContactSection() {
             />
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-parchment-ink/10 text-parchment-ink">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-wood/10 text-wood">
                   <MapPin className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-parchment-ink">Base d&apos;operacions</h4>
-                  <p className="text-sm text-parchment-ink-muted">
-                    Campus Sescelades, Tarragona
-                  </p>
+                  <h4 className="font-semibold text-foreground">Base d&apos;operacions</h4>
+                  <p className="text-sm text-foreground-muted">Campus Sescelades, Tarragona</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-parchment-ink/10 text-parchment-ink">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-wood/10 text-wood">
                   <Mail className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-parchment-ink">Correu electrònic</h4>
+                  <h4 className="font-semibold text-foreground">Correu electrònic</h4>
                   <a
                     href="mailto:info@physicsstars.com"
-                    className="text-sm text-parchment-ink-muted underline decoration-parchment-ink/30 underline-offset-2 hover:text-parchment-ink"
+                    className="text-sm text-foreground-muted underline decoration-foreground/30 underline-offset-2 hover:text-foreground"
                   >
                     info@physicsstars.com
                   </a>
@@ -424,7 +448,7 @@ function ContactSection() {
 
 function SiteFooter() {
   return (
-    <footer className="border-t border-border-subtle px-4 py-8 text-center text-sm text-foreground-muted">
+    <footer className="band-wood px-4 py-8 text-center text-sm text-parchment/70">
       © {new Date().getFullYear()} Physics Stars · Tots els drets reservats
     </footer>
   );

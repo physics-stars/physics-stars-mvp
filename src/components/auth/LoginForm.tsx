@@ -62,7 +62,6 @@ export function LoginForm() {
         name="username"
         label="Nom d'usuari"
         type="text"
-        tone="parchment"
         autoComplete="username"
         value={username}
         onChange={(event) => setUsername(event.target.value)}
@@ -73,7 +72,6 @@ export function LoginForm() {
         id="password"
         name="password"
         label="Contrasenya"
-        tone="parchment"
         autoComplete="current-password"
         value={password}
         onChange={(event) => setPassword(event.target.value)}

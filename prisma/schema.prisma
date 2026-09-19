@@ -66,6 +66,10 @@ model Classroom {
 
   students User[] @relation("ClassroomStudents")
 
+  // Contingut que el professor ha amagat a l'alumnat d'aquesta aula.
+  hiddenWorlds ClassroomHiddenWorld[]
+  hiddenLevels ClassroomHiddenLevel[]
+
   @@index([teacherId])
   @@map("classrooms")
 }
@@ -94,7 +98,8 @@ model World {
   order            Int     @default(0)
   isAvailable      Boolean @default(true)
 
-  levels Level[]
+  levels   Level[]
+  hiddenIn ClassroomHiddenWorld[]
 
   @@map("worlds")
 }
@@ -112,8 +117,34 @@ model Level {
   worldId String
   world   World  @relation(fields: [worldId], references: [id], onDelete: Cascade)
 
+  hiddenIn ClassroomHiddenLevel[]
+
   @@index([worldId])
   @@map("levels")
+}
+
+// Visibilitat per aula: si hi ha una fila, el professor ha AMAGAT aquell
+// món/nivell a l'alumnat d'aquella aula (per defecte tot és visible).
+// L'admin controla la disponibilitat global amb `isAvailable`; el
+// professor només pot amagar/mostrar contingut per a les seves aules.
+model ClassroomHiddenWorld {
+  classroomId String
+  worldId     String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  world       World     @relation(fields: [worldId], references: [id], onDelete: Cascade)
+
+  @@id([classroomId, worldId])
+  @@map("classroom_hidden_worlds")
+}
+
+model ClassroomHiddenLevel {
+  classroomId String
+  levelId     String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  level       Level     @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  @@id([classroomId, levelId])
+  @@map("classroom_hidden_levels")
 }
 
 // Sessió activa d'un usuari. `id` és el hash SHA-256 del token de sessió

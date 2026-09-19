@@ -38,6 +38,28 @@ export function createUser(data: {
   return prisma.user.create({ data });
 }
 
+// Noms d'usuari que comencen amb un prefix (per continuar la numeració
+// quan es creen comptes en bloc).
+export async function findUsernamesStartingWith(prefix: string): Promise<string[]> {
+  const rows = await prisma.user.findMany({
+    where: { username: { startsWith: prefix } },
+    select: { username: true },
+  });
+  return rows.map((row) => row.username);
+}
+
+export async function createUsers(
+  rows: {
+    username: string;
+    passwordHash: string;
+    displayName: string;
+    role: Role;
+    classroomId: string | null;
+  }[],
+): Promise<void> {
+  await prisma.user.createMany({ data: rows });
+}
+
 export function setUserActive(id: string, isActive: boolean): Promise<User> {
   return prisma.user.update({ where: { id }, data: { isActive } });
 }

@@ -22,9 +22,14 @@ export default async function AdminHomePage() {
 
       <div className="grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
         <OptionCard
-          title="Vista global"
-          description="Usuaris i aules de tot el centre: crea comptes, gestiona aules i mou alumnat."
+          title="Usuaris i aules"
+          description="Crea comptes (també diversos alhora), gestiona aules i mou alumnat."
           href="/admin/global"
+        />
+        <OptionCard
+          title="Mons i nivells"
+          description="Crea, edita, ordena i decideix la disponibilitat dels mons i nivells del joc."
+          href="/admin/worlds"
         />
       </div>
     </main>

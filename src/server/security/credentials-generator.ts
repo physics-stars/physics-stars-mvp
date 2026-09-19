@@ -1,4 +1,5 @@
 import { randomInt } from "crypto";
+import { slugify } from "@/lib/utils/slugify";
 import { findUserByUsername } from "@/server/repositories/user-repository";
 
 /*
@@ -35,20 +36,9 @@ export function generatePlainPassword(): string {
 }
 
 // Converteix un nom (p. ex. "Maria García") en una base d'usuari vàlida
-// ("maria.garcia"): minúscules, sense accents, espais com a punts,
-// només lletres/dígits/punts.
-function slugifyDisplayName(displayName: string): string {
-  const withoutAccents = displayName
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-
-  const slug = withoutAccents
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ".")
-    .replace(/[^a-z0-9.]/g, "");
-
-  return slug.length > 0 ? slug : "usuari";
+// ("maria.garcia"): minúscules, sense accents, espais com a punts.
+export function slugifyDisplayName(displayName: string): string {
+  return slugify(displayName, ".") || "usuari";
 }
 
 // Genera un nom d'usuari únic a partir del nom mostrat, afegint un

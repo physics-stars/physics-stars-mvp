@@ -7,8 +7,8 @@ import { clsx } from "@/lib/utils/clsx";
 import type { World } from "@prisma/client";
 
 /*
- * Explorador de mons: llista seleccionable a l'esquerra (panell fosc),
- * detall del món seleccionat a la dreta (panell de pergamí). Tota la
+ * Explorador de mons: llista seleccionable a l'esquerra, detall del món
+ * seleccionat a la dreta (panell de pergamí especial). Tota la
  * interactivitat (quin món està seleccionat) és local a aquest
  * component de client; les dades venen ja carregades del servidor.
  */
@@ -52,24 +52,24 @@ export function WorldExplorer({ worlds }: WorldExplorerProps) {
       {selected && (
         <div className="panel-parchment flex flex-col gap-6 p-6 sm:p-8">
           <div>
-            <span className="eyebrow text-brand-primary/80">{selected.tagline}</span>
-            <h2 className="heading-display mt-1 text-3xl font-bold text-parchment-ink">
+            <span className="eyebrow">{selected.tagline}</span>
+            <h2 className="heading-display mt-1 text-3xl font-bold text-foreground">
               {selected.name}
             </h2>
           </div>
 
-          <p className="leading-relaxed text-parchment-ink-muted">{selected.description}</p>
+          <p className="leading-relaxed text-foreground-muted">{selected.description}</p>
 
           {selected.objectives.length > 0 && (
-            <div className="rounded-xl border border-parchment-border bg-white/30 p-4">
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-parchment-ink">
-                <Sparkles className="h-4 w-4" />
+            <div className="rounded-xl border border-parchment-border bg-background/50 p-4">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-foreground">
+                <Sparkles className="h-4 w-4 text-brand-primary" />
                 Missions clau
               </h3>
               <ul className="flex flex-col gap-1.5">
                 {selected.objectives.map((objective) => (
-                  <li key={objective} className="flex items-start gap-2 text-sm text-parchment-ink-muted">
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-parchment-ink/50" />
+                  <li key={objective} className="flex items-start gap-2 text-sm text-foreground-muted">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-foreground/40" />
                     {objective}
                   </li>
                 ))}
@@ -78,19 +78,19 @@ export function WorldExplorer({ worlds }: WorldExplorerProps) {
           )}
 
           <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-parchment-border pt-5">
-            <span className="text-sm font-semibold text-parchment-ink-muted">
+            <span className="text-sm font-semibold text-foreground-muted">
               {selected.isAvailable ? "Món obert" : "Món tancat"}
             </span>
             {selected.isAvailable ? (
               <Link
                 href={`/menu/${selected.slug}`}
-                className="inline-flex items-center gap-2 rounded-lg bg-brand-primary px-5 py-2.5 text-sm font-bold text-parchment-ink transition-colors hover:bg-brand-primary-hover"
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-primary px-5 py-2.5 text-sm font-bold text-wood-dark transition-colors hover:bg-brand-primary-hover"
               >
                 Viatja
                 <ArrowRight className="h-4 w-4" />
               </Link>
             ) : (
-              <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-parchment-ink/10 px-5 py-2.5 text-sm font-bold text-parchment-ink-muted">
+              <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-foreground/10 px-5 py-2.5 text-sm font-bold text-foreground-muted">
                 <Lock className="h-4 w-4" />
                 Properament
               </span>

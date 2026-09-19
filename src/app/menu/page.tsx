@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/server/services/route-guards";
-import { findAllWorldsOrdered } from "@/server/repositories/world-repository";
+import { listWorldsForStudent } from "@/server/services/content-visibility-service";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { WorldExplorer } from "@/components/menu/WorldExplorer";
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default async function MenuPage() {
   const user = await requireRole("STUDENT");
-  const worlds = await findAllWorldsOrdered();
+  const worlds = await listWorldsForStudent(user.id);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-12 sm:px-8">

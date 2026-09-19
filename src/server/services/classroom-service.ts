@@ -22,7 +22,7 @@ import type { Classroom } from "@prisma/client";
  * persistència.
  */
 
-async function assertClassroomOwnedByTeacher(
+export async function assertClassroomOwnedByTeacher(
   classroomId: string,
   teacherId: string,
 ): Promise<Classroom> {
