@@ -20,15 +20,15 @@ import { hashPassword } from "../src/server/security/password";
 const prisma = createPrismaClient();
 
 async function main() {
-  const studentPasswordHash = await hashPassword("Estrella2026!");
-  const teacherPasswordHash = await hashPassword("Cometa2026!");
-  const adminPasswordHash = await hashPassword("Nebulosa2026!");
+  const studentPasswordHash = await hashPassword("password");
+  const teacherPasswordHash = await hashPassword("password");
+  const adminPasswordHash = await hashPassword("password");
 
   const teacher = await prisma.user.upsert({
-    where: { username: "demo.professor" },
+    where: { username: "professor" },
     update: {},
     create: {
-      username: "demo.professor",
+      username: "professor",
       passwordHash: teacherPasswordHash,
       displayName: "Professor de prova",
       role: "TEACHER",
@@ -36,10 +36,10 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { username: "demo.admin" },
+    where: { username: "admin" },
     update: {},
     create: {
-      username: "demo.admin",
+      username: "admin",
       passwordHash: adminPasswordHash,
       displayName: "Administrador de prova",
       role: "ADMIN",
@@ -57,12 +57,12 @@ async function main() {
   });
 
   const student = await prisma.user.upsert({
-    where: { username: "demo.alumne" },
+    where: { username: "alumne" },
     // Si l'alumne ja existia d'una execució anterior del seed (abans
     // d'afegir aules), s'assegura que quedi assignat a l'aula de prova.
     update: { classroomId: classroom.id },
     create: {
-      username: "demo.alumne",
+      username: "alumne",
       passwordHash: studentPasswordHash,
       displayName: "Alumne de prova",
       role: "STUDENT",
@@ -179,7 +179,7 @@ async function main() {
 
   console.log("Usuaris de prova creats:", {
     professor: teacher.username,
-    admin: "demo.admin",
+    admin: "admin",
     alumne: student.username,
     aula: classroom.name,
   });

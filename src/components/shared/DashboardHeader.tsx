@@ -12,11 +12,10 @@ import { LogoutButton } from "@/components/auth/LogoutButton";
  */
 interface DashboardHeaderProps {
   displayName: string;
-  roleLabel: string;
   homeHref: string;
 }
 
-export function DashboardHeader({ displayName, roleLabel, homeHref }: DashboardHeaderProps) {
+export function DashboardHeader({ displayName, homeHref }: DashboardHeaderProps) {
   return (
     <header className="band-wood flex flex-wrap items-center justify-between gap-4 px-6 py-3.5">
       <Link href={homeHref} className="flex items-center gap-2.5">
@@ -27,7 +26,7 @@ export function DashboardHeader({ displayName, roleLabel, homeHref }: DashboardH
       </Link>
       <div className="flex items-center gap-4">
         <span className="text-sm text-parchment/70">
-          {displayName} · {roleLabel}
+          {displayName}
         </span>
         <div className="w-40">
           <LogoutButton />
