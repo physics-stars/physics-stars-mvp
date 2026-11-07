@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local design references and browser verification artifacts
+/.playwright-cli/
+/.tmp/
+/output/playwright/

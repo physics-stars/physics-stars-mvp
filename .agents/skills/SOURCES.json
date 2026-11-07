@@ -1,0 +1,20 @@
+﻿[
+    {
+        "repo":  "anthropics/skills",
+        "path":  "skills/frontend-design",
+        "commit":  "2c5958ecac7cee2b583967a2c4981d0f4a75c579",
+        "source":  "https://github.com/anthropics/skills/tree/2c5958ecac7cee2b583967a2c4981d0f4a75c579/skills/frontend-design"
+    },
+    {
+        "repo":  "vercel-labs/agent-skills",
+        "path":  "skills/web-design-guidelines",
+        "commit":  "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+        "source":  "https://github.com/vercel-labs/agent-skills/tree/1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62/skills/web-design-guidelines"
+    },
+    {
+        "repo":  "openai/skills",
+        "path":  "skills/.curated/playwright",
+        "commit":  "49f948faa9258a0c61caceaf225e179651397431",
+        "source":  "https://github.com/openai/skills/tree/49f948faa9258a0c61caceaf225e179651397431/skills/.curated/playwright"
+    }
+]
