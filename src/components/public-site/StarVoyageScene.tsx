@@ -710,6 +710,7 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
         width: "100%",
         height: "100%",
         pointerEvents: "none",
+        isolation: "isolate",
       }}
     >
       <div
@@ -743,6 +744,7 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
           transform: "translate(-50%,-50%)",
           opacity: 0,
           pointerEvents: "none",
+          mixBlendMode: "plus-lighter",
         }}
       >
         <Image src="/logo.svg" alt="" fill sizes="240px" />

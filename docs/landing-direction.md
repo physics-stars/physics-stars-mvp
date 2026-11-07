@@ -25,7 +25,7 @@ La estela conserva el historial del recorrido en pantalla. Cada inversión efect
 
 La referencia de movimiento elegida es una persona moviendo una varita mágicamente: variación amplia y orgánica a escala global, suavidad a escala local y ritmo estable. Una S larga y suave es válida; evitar ganchos cortos, caídas en picado, parábolas repetidas, rectas de conexión y maniobras circulares idénticas. No imponer puntos orbitales que deformen la trayectoria para alcanzarlos. Al detenerse y continuar, la dirección debe conservarse.
 
-Para mejorar la duración de las transiciones, los planetas deben entrar y salir antes. No compensar una trayectoria demasiado larga acelerando la luz. El desplazamiento de los planetas tiene su propio calendario; la curva de la luz se diseña en la proyección visible y se recorre por distancia, sin reiniciar aceleraciones en sus uniones internas.
+Las trayectorias aprobadas se conservan. El ritmo de todos los viajes se ha aumentado ligeramente, con un refuerzo gradual en los tramos largos y en la aproximación y vuelta al logo: duran aproximadamente entre un 17 % y un 24 % menos. Se mantienen las pausas de lectura y el frenado suave. El desplazamiento de los planetas tiene su propio calendario; la curva de la luz se diseña en la proyección visible y se recorre por distancia, sin reiniciar aceleraciones en sus uniones internas.
 
 La órbita amarilla no alimenta la estela fina. Al retroceder desde el logo, esta empieza de cero al abandonar el amarillo. El brillo junto a los títulos tiene un pequeño suavizado temporal y se intensifica progresivamente durante el fundido final.
 
@@ -35,7 +35,7 @@ La última curva se abre hacia la derecha y conecta desde abajo con el trazo ama
 
 El texto de cierre aparece después de formarse el logo, con una transición temporal de 1,35 segundos. El scroll no sale del viaje hasta completar ambos. Volver desde los apartados inferiores sitúa el viaje en el logo terminado; rebobinar y repetir vuelve a activar el bloqueo final. El final del viaje también es un punto de encaje del scroll para poder regresar desde los apartados con snap.
 
-Los anillos se colocan antes de que la luz encare la órbita; permanecen fijos durante la incorporación y el trazado. La entrada final de la luz sigue una recta tangente antes de alcanzar el amarillo.
+Los anillos se colocan antes de que la luz encare la órbita; permanecen fijos durante la incorporación y el trazado. La entrada final de la luz se incorpora tangente al amarillo. El render y el SVG comparten el mismo plano de proyección, posición y tamaño durante el fundido; la composición aditiva mantiene el brillo de los trazos al superponerse.
 
 Su aparición empieza después de que Neptuno haya salido completamente del encuadre. El centrado termina cuando la luz alcanza la curva inferior derecha de aproximación, siguiendo la referencia visual del usuario; no deben estar centrados mientras Neptuno sigue en pantalla.
 

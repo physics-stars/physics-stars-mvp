@@ -112,10 +112,20 @@ export async function createPhysicsLogo(): Promise<PhysicsLogoGeometry> {
     | THREE.MeshStandardMaterial
   )[] = [];
   const yellowReveal = { value: 0 };
-  const revealShaders = (
+  const configureLogoShader = (
     material: THREE.MeshBasicMaterial | THREE.MeshStandardMaterial,
+    revealYellow: boolean,
   ) => {
     material.onBeforeCompile = (shader) => {
+      // Keep SVG coordinates on one projected plane. Retain the tiny Z offsets
+      // for paint order without enlarging or shifting rings through perspective.
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <project_vertex>",
+        `#include <project_vertex>
+        vec4 logoPlane = projectionMatrix * modelViewMatrix * vec4(transformed.xy, 0.0, 1.0);
+        gl_Position.xy = logoPlane.xy * (gl_Position.w / logoPlane.w);`,
+      );
+      if (!revealYellow) return;
       shader.uniforms.yellowReveal = yellowReveal;
       shader.vertexShader = shader.vertexShader
         .replace(
@@ -139,7 +149,7 @@ export async function createPhysicsLogo(): Promise<PhysicsLogoGeometry> {
         );
     };
     material.customProgramCacheKey = () =>
-      "physics-logo-exact-svg-arclength-reveal-v2";
+      `physics-logo-svg-plane-v1-${revealYellow ? "yellow-reveal" : "solid"}`;
   };
   type Batch = {
     parent: THREE.Group;
@@ -395,7 +405,7 @@ export async function createPhysicsLogo(): Promise<PhysicsLogoGeometry> {
       bodies.push(body);
       materials.add(sideMaterial);
       if (batch.isYellow) yellowMaterials.push(sideMaterial);
-      if (batch.isYellow) revealShaders(sideMaterial);
+      configureLogoShader(sideMaterial, Boolean(batch.isYellow));
     }
     if (frontGeometry) {
       const frontMaterial = new THREE.MeshBasicMaterial({
@@ -409,7 +419,7 @@ export async function createPhysicsLogo(): Promise<PhysicsLogoGeometry> {
       batch.parent.add(front);
       materials.add(frontMaterial);
       if (batch.isYellow) yellowMaterials.push(frontMaterial);
-      if (batch.isYellow) revealShaders(frontMaterial);
+      configureLogoShader(frontMaterial, Boolean(batch.isYellow));
     }
   }
 
@@ -667,6 +677,13 @@ export async function createPhysicsLogo(): Promise<PhysicsLogoGeometry> {
   }
   bakeRevealPhases();
   const gapBridges = createLogoGapBridges(parsed, WORLD_SCALE, LOGO_CENTER);
+  gapBridges.group.traverse((object) => {
+    if (
+      object instanceof THREE.Mesh &&
+      object.material instanceof THREE.MeshBasicMaterial
+    )
+      configureLogoShader(object.material, false);
+  });
   group.add(gapBridges.group);
   let crossingPhases: number[] = [];
   function refreshCrossingPhases() {

@@ -5,8 +5,22 @@ import { useMotionValue, type MotionValue } from "framer-motion";
 import { finale, smoothRange, visits, waypointStops } from "./voyage-timeline";
 
 const checkpoints = waypointStops.slice(1);
+const longerFlights = [
+  [0, visits[0].parked],
+  [visits[1].departure, visits[2].parked],
+  [visits[2].departure, visits[3].parked],
+  [visits.at(-1)!.departure, finale.settled],
+];
 function speedLimit(p: number) {
-  const flight = 0.05;
+  // Raise cruising speed without a step at either end of the longer flights.
+  const longerFlight = Math.max(
+    ...longerFlights.map(
+      ([start, end]) =>
+        smoothRange(start, start + 0.012, p) *
+        (1 - smoothRange(end - 0.012, end, p)),
+    ),
+  );
+  const flight = 0.06 + 0.006 * longerFlight;
   const visit = visits.find(
     (visit) => p >= visit.parked && p <= visit.departure,
   );
