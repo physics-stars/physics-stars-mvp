@@ -329,33 +329,69 @@ function makeMoon() {
   return merged;
 }
 
-function bandedSphere(kind: "saturn" | "neptune") {
+function saturnSphere() {
   const geometry = new THREE.IcosahedronGeometry(1, 4);
   const positions = geometry.getAttribute("position"),
     colors: number[] = [];
   for (let index = 0; index < positions.count; index++) {
     const y = positions.getY(index);
-    const longitude = Math.atan2(positions.getZ(index), positions.getX(index));
-    const latitude =
-      y + 0.018 * (1 - y * y) * Math.sin(longitude * 3 + y * 2);
     const band =
-      kind === "saturn"
-        ? 0.35 + 0.55 * smooth(-0.6, 0.05, y) - 0.25 * smooth(0.3, 0.7, y)
-        : 0.44 +
-          0.12 * smooth(-0.7, 0.7, latitude) +
-          0.3 * Math.sin(latitude * 12 + 0.4) +
-          0.08 * Math.sin(latitude * 25 - 0.7);
-    const color =
-      kind === "saturn"
-        ? new THREE.Color(0xc9ae7d).lerp(new THREE.Color(0xeddbb3), clamp(band))
-        : new THREE.Color(0x184a9e).lerp(
-            new THREE.Color(0x78b9e6),
-            clamp(band),
-          );
+      0.35 + 0.55 * smooth(-0.6, 0.05, y) - 0.25 * smooth(0.3, 0.7, y);
+    const color = new THREE.Color(0xc9ae7d).lerp(
+      new THREE.Color(0xeddbb3),
+      clamp(band),
+    );
     colors.push(color.r, color.g, color.b);
   }
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   return geometry;
+}
+
+/** Crisp atmospheric belts sit on the faceted surface, without vertex-colour blur. */
+function neptuneBands(material: THREE.MeshStandardMaterial) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.neptuneBlue = { value: new THREE.Color(0x3b74df) };
+    shader.uniforms.neptuneBelt = { value: new THREE.Color(0x234186) };
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying vec3 neptunePoint;",
+      )
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\nneptunePoint = position;",
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        varying vec3 neptunePoint;
+        uniform vec3 neptuneBlue;
+        uniform vec3 neptuneBelt;
+        float neptuneStripe(float latitude, float center, float width) {
+          float edge = max(fwidth(latitude) * 0.85, 0.001);
+          return 1.0 - smoothstep(width - edge, width + edge, abs(latitude - center));
+        }`,
+      )
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+        vec3 point = normalize(neptunePoint);
+        float latitude = point.y;
+        float longitude = atan(point.z, point.x);
+        float belt = neptuneStripe(latitude, 0.81, 0.025);
+        belt = max(belt, neptuneStripe(latitude,
+          0.53 + 0.035 * sin(longitude * 3.0 + 0.4) + 0.015 * sin(longitude * 7.0),
+          0.065 + 0.02 * sin(longitude * 2.0)));
+        belt = max(belt, neptuneStripe(latitude, 0.08 + 0.018 * sin(longitude * 2.0), 0.028));
+        belt = max(belt, neptuneStripe(latitude, -0.49 + 0.02 * sin(longitude * 3.0), 0.10));
+        belt = max(belt, neptuneStripe(latitude, -0.79, 0.024));
+        diffuseColor.rgb = mix(neptuneBlue, neptuneBelt, belt);`,
+      );
+  };
+  material.customProgramCacheKey = () =>
+    "physics-stars-neptune-defined-belts-v1";
+  return material;
 }
 
 function saturnRings() {
@@ -483,7 +519,7 @@ export async function createSolarPlanets(): Promise<SolarPlanets> {
   moon.add(moonSurface);
 
   const saturnSurface = new THREE.Mesh(
-    bandedSphere("saturn"),
+    saturnSphere(),
     standard({ vertexColors: true, emissive: 0xc6ac79, flatShading: true }),
   );
   saturnSurface.scale.y = 0.92;
@@ -508,8 +544,14 @@ export async function createSolarPlanets(): Promise<SolarPlanets> {
     saturn.add(plane);
   }
   const neptuneSurface = new THREE.Mesh(
-    bandedSphere("neptune"),
-    standard({ vertexColors: true, emissive: 0x2b68b9, flatShading: true }),
+    new THREE.IcosahedronGeometry(1, 4),
+    neptuneBands(
+      standard({
+        emissive: 0x194d99,
+        emissiveIntensity: 0.06,
+        flatShading: true,
+      }),
+    ),
   );
   neptune.add(neptuneSurface);
 
