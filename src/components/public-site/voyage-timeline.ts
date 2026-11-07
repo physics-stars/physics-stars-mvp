@@ -9,10 +9,11 @@ export const visits = Array.from({ length: 4 }, (_, index) => {
   return {
     index,
     start,
-    arrived: start + (index === 0 ? 0.046 : 0.03),
-    emerged: start + (index === 0 ? 0.073 : 0.048),
-    parked: start + (index === 0 ? 0.105 : 0.07),
-    textIn: start + (index === 0 ? 0.11 : 0.075),
+    // The shorter Earth–Moon flight arrives sooner; later departures stay fixed.
+    arrived: start + (index === 0 ? 0.046 : index === 1 ? 0.02 : 0.03),
+    emerged: start + (index === 0 ? 0.073 : index === 1 ? 0.036 : 0.048),
+    parked: start + (index === 0 ? 0.105 : index === 1 ? 0.052 : 0.07),
+    textIn: start + (index === 0 ? 0.11 : index === 1 ? 0.057 : 0.075),
     textOut: start + 0.16,
     departure: start + 0.167,
     end: start + 0.185,
