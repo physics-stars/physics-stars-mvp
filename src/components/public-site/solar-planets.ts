@@ -347,11 +347,12 @@ function saturnSphere() {
   return geometry;
 }
 
-/** Crisp atmospheric belts sit on the faceted surface, without vertex-colour blur. */
+/** Soft-edged atmospheric belts and an oval storm follow the faceted surface. */
 function neptuneBands(material: THREE.MeshStandardMaterial) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.neptuneBlue = { value: new THREE.Color(0x3b74df) };
-    shader.uniforms.neptuneBelt = { value: new THREE.Color(0x234186) };
+    shader.uniforms.neptuneBelt = { value: new THREE.Color(0x2b4f99) };
+    shader.uniforms.neptuneStorm = { value: new THREE.Color(0x18356d) };
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -368,8 +369,9 @@ function neptuneBands(material: THREE.MeshStandardMaterial) {
         varying vec3 neptunePoint;
         uniform vec3 neptuneBlue;
         uniform vec3 neptuneBelt;
+        uniform vec3 neptuneStorm;
         float neptuneStripe(float latitude, float center, float width) {
-          float edge = max(fwidth(latitude) * 0.85, 0.001);
+          float edge = max(fwidth(latitude) * 1.05, 0.015);
           return 1.0 - smoothstep(width - edge, width + edge, abs(latitude - center));
         }`,
       )
@@ -386,11 +388,20 @@ function neptuneBands(material: THREE.MeshStandardMaterial) {
         belt = max(belt, neptuneStripe(latitude, 0.08 + 0.018 * sin(longitude * 2.0), 0.028));
         belt = max(belt, neptuneStripe(latitude, -0.49 + 0.02 * sin(longitude * 3.0), 0.10));
         belt = max(belt, neptuneStripe(latitude, -0.79, 0.024));
-        diffuseColor.rgb = mix(neptuneBlue, neptuneBelt, belt);`,
+        diffuseColor.rgb = mix(neptuneBlue, neptuneBelt, belt);
+        float stormAngle = longitude - 2.1;
+        vec2 storm = vec2(
+          atan(sin(stormAngle), cos(stormAngle)) / 0.30,
+          (latitude + 0.20) / 0.092
+        );
+        float stormRim = 1.0 - smoothstep(0.88, 1.12, length(storm));
+        float stormCore = 1.0 - smoothstep(0.60, 0.83, length(storm + vec2(0.0, 0.15)));
+        diffuseColor.rgb = mix(diffuseColor.rgb,
+          mix(neptuneBelt, neptuneStorm, stormCore), stormRim);`,
       );
   };
   material.customProgramCacheKey = () =>
-    "physics-stars-neptune-defined-belts-v1";
+    "physics-stars-neptune-soft-belts-storm-v2";
   return material;
 }
 
