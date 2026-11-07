@@ -105,10 +105,11 @@ export function useVoyageProgress(
       const age = performance.now() - gate.arrived,
         final = gate.point === waypointStops.at(-1);
       if (final && direction > 0 && !finalReadyRef.current) return false;
-      if (gate.fullPause && direction < 0) {
+      if (!final || (gate.fullPause && direction < 0)) {
         const decaying = amount < gate.lastAmount * 0.9;
         gate.lastAmount = amount;
-        if (age < landingPause) {
+        const pause = final ? landingPause : 350;
+        if (age < pause) {
           gate.intent = 0;
           return false;
         }
