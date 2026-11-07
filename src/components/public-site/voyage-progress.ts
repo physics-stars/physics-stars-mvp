@@ -56,6 +56,7 @@ export function useVoyageProgress(
       lastIntent = 0,
       lastGesture = 0;
     let gate: { point: number; arrived: number } | null = null;
+    let overviewLandingAt: number | null = null;
     const trackElement = track.current;
     let wasBelow = false,
       previousNativeY = scrollY;
@@ -127,6 +128,30 @@ export function useVoyageProgress(
     function schedule() {
       if (!frame) frame = requestAnimationFrame(tick);
     }
+    function enterOverview() {
+      const section = document.getElementById("sobre");
+      if (!section) return false;
+      overviewLandingAt = performance.now();
+      progress.set(1);
+      window.scrollTo({
+        top: section.getBoundingClientRect().top + scrollY - header,
+        behavior: "instant",
+      });
+      schedule();
+      return true;
+    }
+    function holdOverview(delta: number, event: Event) {
+      if (overviewLandingAt === null) return false;
+      if (delta < 0 || performance.now() - overviewLandingAt >= 350) {
+        overviewLandingAt = null;
+        return false;
+      }
+      if (!delta) return false;
+      // Consume the tail of the gesture that left the voyage. This expires
+      // after a fixed short pause, even if the wheel keeps sending events.
+      if (event.cancelable) event.preventDefault();
+      return true;
+    }
     function release(direction: number, delta: number) {
       if (!gate) return;
       const point = gate.point,
@@ -138,6 +163,7 @@ export function useVoyageProgress(
       pending = null;
       velocity = 0;
       mark();
+      if (!visit && direction > 0 && enterOverview()) return;
       const b = bounds();
       const edge = visit
         ? direction > 0
@@ -235,6 +261,10 @@ export function useVoyageProgress(
       const base = reversed ? current : (scrollY - b.start) / b.length;
       const canLeave =
         finalReadyRef.current && current >= checkpoints.at(-1)! - 0.00001;
+      if (canLeave && delta > 0) {
+        if (event.cancelable) event.preventDefault();
+        if (enterOverview()) return;
+      }
       const proposed = Math.min(
           canLeave ? Infinity : checkpoints.at(-1)!,
           base + delta / b.length,
@@ -259,6 +289,7 @@ export function useVoyageProgress(
       pending = null;
       bypass = null;
       wasBelow = false;
+      overviewLandingAt = null;
       if (track.current) delete track.current.dataset.voyageSkip;
       arrive(waypointStops.at(-1)!);
       previousNativeY = scrollY;
@@ -269,6 +300,7 @@ export function useVoyageProgress(
           ? event.target.closest<HTMLAnchorElement>('a[href^="#"]')
           : null;
       if (anchor && ["#sobre", "#equip", "#pilot"].includes(anchor.hash)) {
+        overviewLandingAt = null;
         allowNativeJumpUntil = performance.now() + 1200;
         if (track.current) track.current.dataset.voyageSkip = "true";
       }
@@ -303,19 +335,16 @@ export function useVoyageProgress(
       previousNativeY = y;
     }
     function wheel(event: WheelEvent) {
-      if (
-        event.ctrlKey ||
-        Math.abs(event.deltaX) > Math.abs(event.deltaY) ||
-        !inside()
-      )
+      if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY))
         return;
+      const delta =
+        event.deltaY *
+        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
+      if (holdOverview(delta, event) || !inside()) return;
       const now = performance.now(),
         quiet = now - lastGesture;
       lastGesture = now;
       lastIntent = now;
-      const delta =
-        event.deltaY *
-        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
       if (!delta) return;
       if (gate) {
         event.preventDefault();
@@ -328,7 +357,7 @@ export function useVoyageProgress(
       consumeDelta(delta, event);
     }
     function key(event: KeyboardEvent) {
-      if (!inside() || event.altKey || event.metaKey) return;
+      if (event.altKey || event.metaKey) return;
       if (event.ctrlKey && !["End", "Home"].includes(event.key)) return;
       if (
         event.target instanceof HTMLElement &&
@@ -352,6 +381,7 @@ export function useVoyageProgress(
           ? -1
           : 0;
       if (!direction) return;
+      if (holdOverview(direction, event) || !inside()) return;
       lastIntent = performance.now();
       const b = bounds();
       if (!b) return;
@@ -379,6 +409,15 @@ export function useVoyageProgress(
       newTouch = !!gate && performance.now() - gate.arrived > 400;
     }
     function touchMove(event: TouchEvent) {
+      if (
+        overviewLandingAt !== null &&
+        touchY !== null &&
+        event.touches.length === 1 &&
+        holdOverview(touchY - event.touches[0].clientY, event)
+      ) {
+        touchY = event.touches[0].clientY;
+        return;
+      }
       if (!inside()) return;
       if (event.touches.length !== 1) {
         touchY = null;
@@ -403,6 +442,7 @@ export function useVoyageProgress(
       }
     }
     seekRef.current = (point) => {
+      overviewLandingAt = null;
       if (track.current) delete track.current.dataset.voyageSkip;
       gate = null;
       ignored = null;

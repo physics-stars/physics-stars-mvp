@@ -41,7 +41,7 @@ Su aparición empieza después de que Neptuno haya salido completamente del encu
 
 Mientras el viaje controla la entrada, rueda, teclado y gesto táctil actualizan un único destino nativo limitado. Se evita el doble suavizado del scroll del navegador y el anclaje automático del contenido. El snap de los apartados se activa después de terminar el cierre o al saltar expresamente mediante un enlace.
 
-Después del viaje, Sobre Physics Stars, equipo y piloto encajan bajo la cabecera con scroll snap. En pantallas pequeñas el contenido puede crecer para conservar la lectura. Hay modo sin animaciones y soporte de movimiento reducido.
+Después del viaje, el primer descenso encaja expresamente en Sobre Physics Stars, incluso con un gesto largo. Se descarta la inercia sobrante durante una pausa fija de 350 ms; después se puede seguir avanzando. Volver hacia arriba permite regresar al logo. Sobre Physics Stars, equipo y piloto encajan bajo la cabecera con scroll snap. En pantallas pequeñas el contenido puede crecer para conservar la lectura. Hay modo sin animaciones y soporte de movimiento reducido.
 
 ## Recursos y alcance
 
