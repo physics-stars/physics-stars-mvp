@@ -76,9 +76,9 @@ export function createVoyageMotion(
     0.035,
     Math.min(0.095, Math.min(p0.y, p1.y, p2.y, p3.y) + 0.34),
   );
-  // Only the opening has an extra revolution. Offsetting the reading knots
-  // keeps every later gesture and its timing independent of this first loop.
-  const openingOffset = 3;
+  // Earth–Moon uses a single free control point. Keep the reading knots explicit
+  // so removing that extra bend leaves every other gesture unchanged.
+  const readingKnots = [7, 11, 16, 21];
   const controls = [
     hero.clone(),
     v(narrow ? -0.08 : 0.14, narrow ? 0.12 : 0.1),
@@ -90,8 +90,7 @@ export function createVoyageMotion(
     p0.clone(),
     p0.clone(),
     p0.clone(),
-    blend(p0, p1, 0.32, -(narrow ? lowerRoom * 0.52 : 0.075), -1.4),
-    blend(p0, p1, 0.82, -(narrow ? lowerRoom * 0.8 : 0.055), -3.2),
+    blend(p0, p1, 0.58, -(narrow ? lowerRoom * 0.8 : 0.085), -2.4),
     p1.clone(),
     p1.clone(),
     p1.clone(),
@@ -118,9 +117,9 @@ export function createVoyageMotion(
   controls[4].z = 1.4;
   controls[5].z = 2.4;
   controls[6].z = 2.8;
-  controls[18 + openingOffset].z = 1.2;
+  controls[readingKnots[3] - 1].z = 1.2;
   for (let index = 0; index < 4; index++) {
-    const center = 5 + index * 5 + openingOffset,
+    const center = readingKnots[index] + 1,
       point = parks[index],
       direction = directions[index],
       normal = normals[index];
@@ -139,10 +138,10 @@ export function createVoyageMotion(
     for (let offset = -1; offset <= 1; offset++)
       controls[center + offset].z = point.z;
   }
-  controls[22 + openingOffset].z = orbitStart.z;
-  controls[23 + openingOffset].z =
+  controls[controls.length - 3].z = orbitStart.z;
+  controls[controls.length - 2].z =
     orbitStart.z - (0.075 * orbitVelocity.z) / Math.max(endSpeed, 0.0001);
-  controls[24 + openingOffset].z = orbitStart.z;
+  controls[controls.length - 1].z = orbitStart.z;
 
   const degree = 3,
     spans = controls.length - degree;
@@ -219,9 +218,7 @@ export function createVoyageMotion(
     speeds[i] = Math.max(0.0001, Math.hypot(samplePoint.x, samplePoint.y));
   }
   const totalLength = lengths[samples],
-    stations = [4, 9, 14, 19].map(
-      (knot) => lengths[(knot + openingOffset) * 96],
-    );
+    stations = readingKnots.map((knot) => lengths[knot * 96]);
   function parameterAt(distance: number) {
     const s = Math.max(0, Math.min(totalLength, distance));
     let lo = 0,
@@ -373,10 +370,10 @@ export function createVoyageMotion(
       return out;
     },
     parkTangent(out: THREE.Vector3) {
-      return spline((4 + openingOffset) / spans, out, 1);
+      return spline(readingKnots[0] / spans, out, 1);
     },
     readingTangent(index: number, out: THREE.Vector3) {
-      return spline((4 + index * 5 + openingOffset) / spans, out, 1);
+      return spline(readingKnots[index] / spans, out, 1);
     },
     logoBankAt: 0.79,
     rhythmAt(p: number) {
