@@ -57,6 +57,7 @@ export function useVoyageProgress(
       lastGesture = 0;
     let gate: { point: number; arrived: number } | null = null;
     let overviewLandingAt: number | null = null;
+    let overviewLastInputAt = 0;
     let overviewTransition: { top: number; started: number } | null = null;
     let overviewFrame = 0;
     const trackElement = track.current;
@@ -153,6 +154,7 @@ export function useVoyageProgress(
       const top = section.getBoundingClientRect().top + scrollY - header;
       clearOverviewTransition();
       overviewLandingAt = null;
+      overviewLastInputAt = performance.now();
       overviewTransition = { top, started: performance.now() };
       if (track.current) track.current.dataset.voyageLeaving = "true";
       progress.set(1);
@@ -165,6 +167,12 @@ export function useVoyageProgress(
       return true;
     }
     function holdOverview(delta: number, event: Event) {
+      const now = performance.now();
+      const freshGesture =
+        event.type === "keydown"
+          ? !(event as KeyboardEvent).repeat
+          : now - overviewLastInputAt > 160;
+      overviewLastInputAt = now;
       if (overviewTransition) {
         if (delta < 0) {
           clearOverviewTransition();
@@ -178,13 +186,13 @@ export function useVoyageProgress(
         }
       }
       if (overviewLandingAt === null) return false;
-      if (delta < 0 || performance.now() - overviewLandingAt >= 350) {
+      if (delta < 0 || (now - overviewLandingAt >= 350 && freshGesture)) {
         overviewLandingAt = null;
         return false;
       }
       if (!delta) return false;
-      // Consume the tail of the gesture that left the voyage. This expires
-      // after a fixed short pause, even if the wheel keeps sending events.
+      // Momentum belongs to the gesture that left the voyage, even after the
+      // reading pause. Only a fresh gesture advances beyond the first section.
       if (event.cancelable) event.preventDefault();
       return true;
     }
