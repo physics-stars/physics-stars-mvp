@@ -335,15 +335,21 @@ function bandedSphere(kind: "saturn" | "neptune") {
     colors: number[] = [];
   for (let index = 0; index < positions.count; index++) {
     const y = positions.getY(index);
+    const longitude = Math.atan2(positions.getZ(index), positions.getX(index));
+    const latitude =
+      y + 0.018 * (1 - y * y) * Math.sin(longitude * 3 + y * 2);
     const band =
       kind === "saturn"
         ? 0.35 + 0.55 * smooth(-0.6, 0.05, y) - 0.25 * smooth(0.3, 0.7, y)
-        : 0.2 + 0.65 * smooth(-0.65, 0.55, y);
+        : 0.44 +
+          0.12 * smooth(-0.7, 0.7, latitude) +
+          0.3 * Math.sin(latitude * 12 + 0.4) +
+          0.08 * Math.sin(latitude * 25 - 0.7);
     const color =
       kind === "saturn"
         ? new THREE.Color(0xc9ae7d).lerp(new THREE.Color(0xeddbb3), clamp(band))
-        : new THREE.Color(0x245dbb).lerp(
-            new THREE.Color(0x398bd6),
+        : new THREE.Color(0x184a9e).lerp(
+            new THREE.Color(0x78b9e6),
             clamp(band),
           );
     colors.push(color.r, color.g, color.b);
