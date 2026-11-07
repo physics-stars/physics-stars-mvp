@@ -57,6 +57,8 @@ export function useVoyageProgress(
       lastGesture = 0;
     let gate: { point: number; arrived: number } | null = null;
     let overviewLandingAt: number | null = null;
+    let overviewTransition: { top: number; started: number } | null = null;
+    let overviewFrame = 0;
     const trackElement = track.current;
     let wasBelow = false,
       previousNativeY = scrollY;
@@ -128,19 +130,53 @@ export function useVoyageProgress(
     function schedule() {
       if (!frame) frame = requestAnimationFrame(tick);
     }
+    function clearOverviewTransition() {
+      cancelAnimationFrame(overviewFrame);
+      overviewFrame = 0;
+      overviewTransition = null;
+      if (track.current) delete track.current.dataset.voyageLeaving;
+    }
+    function followOverview(time: number) {
+      overviewFrame = 0;
+      if (!overviewTransition) return;
+      const arrived = Math.abs(scrollY - overviewTransition.top) < 1.5;
+      if (arrived || time - overviewTransition.started > 1500) {
+        clearOverviewTransition();
+        overviewLandingAt = arrived ? time : null;
+        return;
+      }
+      overviewFrame = requestAnimationFrame(followOverview);
+    }
     function enterOverview() {
       const section = document.getElementById("sobre");
       if (!section) return false;
-      overviewLandingAt = performance.now();
+      const top = section.getBoundingClientRect().top + scrollY - header;
+      clearOverviewTransition();
+      overviewLandingAt = null;
+      overviewTransition = { top, started: performance.now() };
+      if (track.current) track.current.dataset.voyageLeaving = "true";
       progress.set(1);
       window.scrollTo({
-        top: section.getBoundingClientRect().top + scrollY - header,
-        behavior: "instant",
+        top,
+        behavior: "smooth",
       });
+      overviewFrame = requestAnimationFrame(followOverview);
       schedule();
       return true;
     }
     function holdOverview(delta: number, event: Event) {
+      if (overviewTransition) {
+        if (delta < 0) {
+          clearOverviewTransition();
+          if (event.cancelable) event.preventDefault();
+          window.scrollTo({ top: scrollY + delta, behavior: "instant" });
+          return true;
+        }
+        if (delta > 0) {
+          if (event.cancelable) event.preventDefault();
+          return true;
+        }
+      }
       if (overviewLandingAt === null) return false;
       if (delta < 0 || performance.now() - overviewLandingAt >= 350) {
         overviewLandingAt = null;
@@ -281,6 +317,7 @@ export function useVoyageProgress(
       schedule();
     }
     function reenterFinal() {
+      clearOverviewTransition();
       cancelAnimationFrame(frame);
       frame = 0;
       previousTime = 0;
@@ -300,6 +337,7 @@ export function useVoyageProgress(
           ? event.target.closest<HTMLAnchorElement>('a[href^="#"]')
           : null;
       if (anchor && ["#sobre", "#equip", "#pilot"].includes(anchor.hash)) {
+        clearOverviewTransition();
         overviewLandingAt = null;
         allowNativeJumpUntil = performance.now() + 1200;
         if (track.current) track.current.dataset.voyageSkip = "true";
@@ -381,8 +419,6 @@ export function useVoyageProgress(
           ? -1
           : 0;
       if (!direction) return;
-      if (holdOverview(direction, event) || !inside()) return;
-      lastIntent = performance.now();
       const b = bounds();
       if (!b) return;
       const delta =
@@ -392,6 +428,8 @@ export function useVoyageProgress(
           : ["PageDown", "PageUp", " "].includes(event.key)
             ? innerHeight * 0.8
             : 70);
+      if (holdOverview(delta, event) || !inside()) return;
+      lastIntent = performance.now();
       if (gate) {
         event.preventDefault();
         if (canRelease(!event.repeat, direction)) release(direction, delta);
@@ -410,7 +448,7 @@ export function useVoyageProgress(
     }
     function touchMove(event: TouchEvent) {
       if (
-        overviewLandingAt !== null &&
+        (overviewTransition !== null || overviewLandingAt !== null) &&
         touchY !== null &&
         event.touches.length === 1 &&
         holdOverview(touchY - event.touches[0].clientY, event)
@@ -442,6 +480,7 @@ export function useVoyageProgress(
       }
     }
     seekRef.current = (point) => {
+      clearOverviewTransition();
       overviewLandingAt = null;
       if (track.current) delete track.current.dataset.voyageSkip;
       gate = null;
@@ -465,6 +504,7 @@ export function useVoyageProgress(
     window.addEventListener("touchmove", touchMove, { passive: false });
     schedule();
     return () => {
+      clearOverviewTransition();
       unsubscribe();
       cancelAnimationFrame(frame);
       seekRef.current = () => {};

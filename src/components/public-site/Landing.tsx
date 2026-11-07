@@ -35,7 +35,10 @@ export function Landing() {
       const complete =
         journey?.dataset.voyageComplete === "true" ||
         journey?.dataset.voyageSkip === "true";
-      const next = complete && scrollY >= boundary - 36;
+      const next =
+        complete &&
+        journey?.dataset.voyageLeaving !== "true" &&
+        scrollY >= boundary - 36;
       if (next === enabled) return;
       enabled = next;
       root.style.scrollSnapType = next ? "y mandatory" : previousSnap;
@@ -47,7 +50,11 @@ export function Landing() {
     if (journey)
       observer.observe(journey, {
         attributes: true,
-        attributeFilter: ["data-voyage-complete", "data-voyage-skip"],
+        attributeFilter: [
+          "data-voyage-complete",
+          "data-voyage-skip",
+          "data-voyage-leaving",
+        ],
       });
     update();
     return () => {
