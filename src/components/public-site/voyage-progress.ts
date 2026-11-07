@@ -55,8 +55,10 @@ export function useVoyageProgress(
       velocity = 0,
       lastIntent = 0,
       lastGesture = 0;
-    let gate: { point: number; arrived: number } | null = null;
+    let gate: { point: number; arrived: number; fullPause: boolean } | null =
+      null;
     let overviewLandingAt: number | null = null;
+    let overviewSection: HTMLElement | null = null;
     let overviewLastInputAt = 0;
     let overviewTransition: { top: number; started: number } | null = null;
     let overviewFrame = 0;
@@ -94,6 +96,7 @@ export function useVoyageProgress(
       const age = performance.now() - gate.arrived,
         final = gate.point === waypointStops.at(-1);
       if (final && direction > 0 && !finalReadyRef.current) return false;
+      if (gate.fullPause && direction < 0) return age > 350;
       return age > 350 || (fresh && age > 200);
     }
     function nextPoint(current: number, destination: number) {
@@ -115,8 +118,8 @@ export function useVoyageProgress(
                 point < current - 0.000005 && point >= destination - 0.0002,
             );
     }
-    function arrive(point: number) {
-      gate = { point, arrived: performance.now() };
+    function arrive(point: number, fullPause = false) {
+      gate = { point, arrived: performance.now(), fullPause };
       lastGesture = performance.now();
       bypass = null;
       pending = null;
@@ -148,9 +151,9 @@ export function useVoyageProgress(
       }
       overviewFrame = requestAnimationFrame(followOverview);
     }
-    function enterOverview() {
-      const section = document.getElementById("sobre");
+    function enterOverview(section = document.getElementById("sobre")) {
       if (!section) return false;
+      overviewSection = section;
       const top = section.getBoundingClientRect().top + scrollY - header;
       clearOverviewTransition();
       overviewLandingAt = null;
@@ -186,13 +189,26 @@ export function useVoyageProgress(
         }
       }
       if (overviewLandingAt === null) return false;
-      if (delta < 0 || (now - overviewLandingAt >= 350 && freshGesture)) {
+      const age = now - overviewLandingAt;
+      if (delta < 0 || age > 350 || (freshGesture && age > 200)) {
         overviewLandingAt = null;
+        const next = overviewSection?.nextElementSibling;
+        if (
+          delta > 0 &&
+          overviewSection &&
+          overviewSection.getBoundingClientRect().height <=
+            innerHeight - header + 2 &&
+          next instanceof HTMLElement &&
+          next.hasAttribute("data-snap-section")
+        ) {
+          if (event.cancelable) event.preventDefault();
+          return enterOverview(next);
+        }
         return false;
       }
       if (!delta) return false;
-      // Momentum belongs to the gesture that left the voyage, even after the
-      // reading pause. Only a fresh gesture advances beyond the first section.
+      // Match the voyage's reading stops: pause briefly, then allow continued
+      // scrolling without requiring the person to release the wheel.
       if (event.cancelable) event.preventDefault();
       return true;
     }
@@ -336,7 +352,7 @@ export function useVoyageProgress(
       wasBelow = false;
       overviewLandingAt = null;
       if (track.current) delete track.current.dataset.voyageSkip;
-      arrive(waypointStops.at(-1)!);
+      arrive(waypointStops.at(-1)!, true);
       previousNativeY = scrollY;
     }
     function navigation(event: MouseEvent) {
