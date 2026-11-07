@@ -5,6 +5,8 @@ import { useMotionValue, type MotionValue } from "framer-motion";
 import { finale, smoothRange, visits, waypointStops } from "./voyage-timeline";
 
 const checkpoints = waypointStops.slice(1);
+const landingPause = 500;
+const continuedScroll = 160;
 const longerFlights = [
   [0, visits[0].parked],
   [visits[1].departure, visits[2].parked],
@@ -55,11 +57,18 @@ export function useVoyageProgress(
       velocity = 0,
       lastIntent = 0,
       lastGesture = 0;
-    let gate: { point: number; arrived: number; fullPause: boolean } | null =
-      null;
+    let gate: {
+      point: number;
+      arrived: number;
+      fullPause: boolean;
+      intent: number;
+      lastAmount: number;
+    } | null = null;
     let overviewLandingAt: number | null = null;
     let overviewSection: HTMLElement | null = null;
     let overviewLastInputAt = 0;
+    let overviewIntent = 0;
+    let overviewLastAmount = 0;
     let overviewTransition: { top: number; started: number } | null = null;
     let overviewFrame = 0;
     const trackElement = track.current;
@@ -91,12 +100,21 @@ export function useVoyageProgress(
       if (track.current)
         track.current.dataset.scrollCheckpoint = gate ? "reading" : "flight";
     }
-    function canRelease(fresh: boolean, direction: number) {
+    function canRelease(fresh: boolean, direction: number, amount: number) {
       if (!gate) return true;
       const age = performance.now() - gate.arrived,
         final = gate.point === waypointStops.at(-1);
       if (final && direction > 0 && !finalReadyRef.current) return false;
-      if (gate.fullPause && direction < 0) return age > 350;
+      if (gate.fullPause && direction < 0) {
+        const decaying = amount < gate.lastAmount * 0.9;
+        gate.lastAmount = amount;
+        if (age < landingPause) {
+          gate.intent = 0;
+          return false;
+        }
+        gate.intent = decaying ? 0 : gate.intent + amount;
+        return fresh || gate.intent >= continuedScroll;
+      }
       return age > 350 || (fresh && age > 200);
     }
     function nextPoint(current: number, destination: number) {
@@ -119,7 +137,13 @@ export function useVoyageProgress(
             );
     }
     function arrive(point: number, fullPause = false) {
-      gate = { point, arrived: performance.now(), fullPause };
+      gate = {
+        point,
+        arrived: performance.now(),
+        fullPause,
+        intent: 0,
+        lastAmount: 0,
+      };
       lastGesture = performance.now();
       bypass = null;
       pending = null;
@@ -147,6 +171,7 @@ export function useVoyageProgress(
       if (arrived || time - overviewTransition.started > 1500) {
         clearOverviewTransition();
         overviewLandingAt = arrived ? time : null;
+        overviewIntent = 0;
         return;
       }
       overviewFrame = requestAnimationFrame(followOverview);
@@ -157,6 +182,8 @@ export function useVoyageProgress(
       const top = section.getBoundingClientRect().top + scrollY - header;
       clearOverviewTransition();
       overviewLandingAt = null;
+      overviewIntent = 0;
+      overviewLastAmount = 0;
       overviewLastInputAt = performance.now();
       overviewTransition = { top, started: performance.now() };
       if (track.current) track.current.dataset.voyageLeaving = "true";
@@ -176,6 +203,9 @@ export function useVoyageProgress(
           ? !(event as KeyboardEvent).repeat
           : now - overviewLastInputAt > 160;
       overviewLastInputAt = now;
+      const amount = Math.abs(delta);
+      const decaying = amount < overviewLastAmount * 0.9;
+      overviewLastAmount = amount;
       if (overviewTransition) {
         if (delta < 0) {
           clearOverviewTransition();
@@ -189,8 +219,15 @@ export function useVoyageProgress(
         }
       }
       if (overviewLandingAt === null) return false;
+      if (!delta) return false;
       const age = now - overviewLandingAt;
-      if (delta < 0 || age > 350 || (freshGesture && age > 200)) {
+      if (age < landingPause) overviewIntent = 0;
+      else overviewIntent = decaying ? 0 : overviewIntent + amount;
+      if (
+        delta < 0 ||
+        (age >= landingPause &&
+          (freshGesture || overviewIntent >= continuedScroll))
+      ) {
         overviewLandingAt = null;
         const next = overviewSection?.nextElementSibling;
         if (
@@ -206,9 +243,8 @@ export function useVoyageProgress(
         }
         return false;
       }
-      if (!delta) return false;
-      // Match the voyage's reading stops: pause briefly, then allow continued
-      // scrolling without requiring the person to release the wheel.
+      // Discard momentum during the pause. Sustained input can still resume
+      // the journey without requiring a break between wheel events.
       if (event.cancelable) event.preventDefault();
       return true;
     }
@@ -410,7 +446,7 @@ export function useVoyageProgress(
       if (!delta) return;
       if (gate) {
         event.preventDefault();
-        if (canRelease(quiet > 140, Math.sign(delta)))
+        if (canRelease(quiet > 140, Math.sign(delta), Math.abs(delta)))
           release(Math.sign(delta), delta);
         else scrollToPoint(gate.point);
         return;
@@ -456,7 +492,8 @@ export function useVoyageProgress(
       lastIntent = performance.now();
       if (gate) {
         event.preventDefault();
-        if (canRelease(!event.repeat, direction)) release(direction, delta);
+        if (canRelease(!event.repeat, direction, Math.abs(delta)))
+          release(direction, delta);
       } else {
         consumeDelta(delta, event);
       }
@@ -495,7 +532,10 @@ export function useVoyageProgress(
       lastIntent = performance.now();
       if (gate) {
         event.preventDefault();
-        if (canRelease(newTouch, Math.sign(delta)) && delta !== 0) {
+        if (
+          canRelease(newTouch, Math.sign(delta), Math.abs(delta)) &&
+          delta !== 0
+        ) {
           newTouch = false;
           release(Math.sign(delta), delta);
         }
