@@ -44,32 +44,13 @@ prisma/
 1. Instal·la les dependències:
 
    ```bash
-   npm install
+   pnpm install
    ```
 
-2. Copia `.env.example` a `.env` i omple `DATABASE_URL` / `DIRECT_URL` amb
-   les credencials de la teva base de dades Neon (es poden obtenir
-   automàticament instal·lant la integració de Neon des del marketplace
-   de Vercel).
-
-3. Aplica el model de dades a la base de dades:
+2. Engega el servidor de desenvolupament:
 
    ```bash
-   npm run db:migrate
-   ```
-
-4. (Opcional) Crea un usuari de prova:
-
-   ```bash
-   npm run db:seed
-   ```
-
-   Crea l'usuari `demo.alumne` amb la contrasenya `Estrella2026!`.
-
-5. Engega el servidor de desenvolupament:
-
-   ```bash
-   npm run dev
+   pnpm run dev
    ```
 
    Obre [http://localhost:3000](http://localhost:3000).
