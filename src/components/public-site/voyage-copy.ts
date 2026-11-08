@@ -9,6 +9,7 @@ export type VoyageCopy = {
   heroBody: string;
   start: string;
   scroll: string;
+  continueScroll: string;
   skip: string;
   navigation: string;
   planets: [VoyagePlanet, VoyagePlanet, VoyagePlanet, VoyagePlanet];
@@ -22,7 +23,6 @@ export type VoyageCopy = {
   pilotCta: string;
   prototype: string;
   stationary: string;
-  readStory: string;
   overview: {
     label: string;
     title: string;
@@ -41,6 +41,7 @@ export const voyageCopy: Record<Locale, VoyageCopy> = {
       "Physics Stars és un videojoc narratiu per aprendre física a secundària. L'alumnat investiga situacions, pren mesures i construeix el problema abans d'aplicar les fórmules.",
     start: "Comença el viatge",
     scroll: "Desplaça't per descobrir",
+    continueScroll: "Continua baixant",
     skip: "Parlem del pilot",
     navigation: "El viatge de Physics Stars",
     planets: [
@@ -78,7 +79,6 @@ export const voyageCopy: Record<Locale, VoyageCopy> = {
     pilotCta: "Parlem del pilot",
     prototype: "Prototip digital en desenvolupament",
     stationary: "Versió amb moviment reduït",
-    readStory: "Llegeix sense animacions",
     overview: {
       label: "Sobre Physics Stars",
       title: "Una aventura per pensar com un científic.",
@@ -113,6 +113,7 @@ export const voyageCopy: Record<Locale, VoyageCopy> = {
       "Physics Stars es un videojuego narrativo para aprender física en secundaria. El alumnado investiga situaciones, toma medidas y construye el problema antes de aplicar las fórmulas.",
     start: "Empieza el viaje",
     scroll: "Haz scroll para descubrir",
+    continueScroll: "Sigue bajando",
     skip: "Hablemos del piloto",
     navigation: "El viaje de Physics Stars",
     planets: [
@@ -149,7 +150,6 @@ export const voyageCopy: Record<Locale, VoyageCopy> = {
     pilotCta: "Hablemos del piloto",
     prototype: "Prototipo digital en desarrollo",
     stationary: "Versión con movimiento reducido",
-    readStory: "Leer sin animaciones",
     overview: {
       label: "Sobre Physics Stars",
       title: "Una aventura para pensar como un científico.",
@@ -184,6 +184,7 @@ export const voyageCopy: Record<Locale, VoyageCopy> = {
       "Physics Stars is a story-driven game for learning physics in secondary school. Students investigate situations, take measurements and frame the problem before applying formulas.",
     start: "Start the journey",
     scroll: "Scroll to discover",
+    continueScroll: "Keep scrolling",
     skip: "Let's talk about a pilot",
     navigation: "The Physics Stars journey",
     planets: [
@@ -220,7 +221,6 @@ export const voyageCopy: Record<Locale, VoyageCopy> = {
     pilotCta: "Let's talk about a pilot",
     prototype: "Digital prototype in development",
     stationary: "Reduced-motion version",
-    readStory: "Read without animations",
     overview: {
       label: "About Physics Stars",
       title: "An adventure in thinking like a scientist.",

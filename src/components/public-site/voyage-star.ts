@@ -36,9 +36,11 @@ export function createVoyageStar() {
   return {
     group,
     tail: new THREE.Vector3(-0.15, 0, 0),
-    setFocus(amount: number, overDiscs = false, dissolve = 0) {
+    setFocus(amount: number, overDiscs = false, dissolve = 0, visibility = 1) {
       halo.scale.setScalar((3.2 + amount * 1.1) * (1 + dissolve * 0.2));
-      haloMaterial.opacity = (1 + amount * 0.35) * (1 + dissolve * 3);
+      haloMaterial.opacity =
+        (1 + amount * 0.35) * (1 + dissolve * 3) * visibility;
+      material.opacity = visibility;
       haloMaterial.depthTest = !overDiscs;
       material.depthTest = !overDiscs;
     },

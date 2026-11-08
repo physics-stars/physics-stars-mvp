@@ -10,6 +10,7 @@ export function isLocale(value: unknown): value is Locale {
 const ca = {
   meta: "La física comença abans de la fórmula. Una aventura per observar, investigar i aprendre a pensar com un científic. Prototip digital de Physics Stars.",
   nav: {
+    home: "Inici",
     game: "La idea",
     teachers: "Per a docents",
     team: "Qui som",
@@ -137,6 +138,7 @@ export type PublicCopy = typeof ca;
 const es: PublicCopy = {
   meta: "La física empieza antes de la fórmula. Una aventura para observar, investigar y aprender a pensar como un científico. Prototipo digital de Physics Stars.",
   nav: {
+    home: "Inicio",
     game: "La idea",
     teachers: "Para docentes",
     team: "Quiénes somos",
@@ -262,6 +264,7 @@ const es: PublicCopy = {
 const en: PublicCopy = {
   meta: "Physics starts before the formula. An adventure in observing, investigating and learning to think like a scientist. Physics Stars digital prototype.",
   nav: {
+    home: "Home",
     game: "The idea",
     teachers: "For teachers",
     team: "Our story",

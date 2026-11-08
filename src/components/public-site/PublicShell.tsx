@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Exo_2 } from "next/font/google";
@@ -51,13 +58,7 @@ export function PublicShell({
         </a>
         <header className={styles.header}>
           <Brand locale={locale} />
-          {!login && (
-            <nav className={styles.navigation} aria-label={t.nav.game}>
-              <a href="#sobre">{t.nav.game}</a>
-              <a href="#pilot">{t.nav.teachers}</a>
-              <a href="#equip">{t.nav.team}</a>
-            </nav>
-          )}
+          {!login && <LandingNavigation locale={locale} />}
           <div className={styles.headerActions}>
             <LanguageSwitch />
             {!login && (
@@ -71,6 +72,99 @@ export function PublicShell({
         {children}
       </div>
     </LocaleContext>
+  );
+}
+
+function LandingNavigation({ locale }: { locale: Locale }) {
+  const [active, setActive] = useState("idea");
+  const jumpFrame = useRef(0);
+  const t = publicCopy[locale].nav;
+  const links = [
+    ["idea", t.home],
+    ["sobre", t.game],
+    ["equip", t.team],
+    ["pilot", t.teachers],
+  ];
+  useEffect(() => {
+    let frame = 0;
+    function update() {
+      frame = 0;
+      const header =
+        document.querySelector("header")?.getBoundingClientRect().height ?? 76;
+      const current = ["sobre", "equip", "pilot"].findLast(
+        (id) =>
+          (document.getElementById(id)?.getBoundingClientRect().top ??
+            Infinity) <=
+          header + 40,
+      );
+      setActive(current ?? "idea");
+    }
+    function schedule() {
+      if (!frame) frame = requestAnimationFrame(update);
+    }
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(jumpFrame.current);
+      const journey = document.getElementById("idea");
+      if (journey) delete journey.dataset.landingJump;
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, []);
+  return (
+    <nav className={styles.navigation} aria-label={t.game}>
+      {links.map(([id, label]) => (
+        <a
+          key={id}
+          href={`#${id}`}
+          data-landing-nav
+          aria-current={active === id ? "location" : undefined}
+          onClick={(event) => {
+            if (
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            )
+              return;
+            event.preventDefault();
+            const target = document.getElementById(id);
+            if (!target) return;
+            const jump = new CustomEvent("landing-navigate", {
+              detail: id,
+              cancelable: true,
+            });
+            if (!window.dispatchEvent(jump)) return;
+            const header = event.currentTarget
+              .closest("header")!
+              .getBoundingClientRect().height;
+            // Direct navigation replaces the current scroll position.
+            const journey = document.getElementById("idea");
+            if (journey) journey.dataset.landingJump = "true";
+            cancelAnimationFrame(jumpFrame.current);
+            window.scrollTo({
+              top:
+                id === "idea"
+                  ? 0
+                  : target.getBoundingClientRect().top + scrollY - header,
+              behavior: "instant",
+            });
+            jumpFrame.current = requestAnimationFrame(() => {
+              jumpFrame.current = requestAnimationFrame(() => {
+                if (journey) delete journey.dataset.landingJump;
+              });
+            });
+            history.pushState(history.state, "", `#${id}`);
+            setActive(id);
+          }}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
   );
 }
 

@@ -1,12 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useMotionValue, type MotionValue } from "framer-motion";
 import { finale, smoothRange, visits, waypointStops } from "./voyage-timeline";
+import { ScrollGesture } from "./scroll-gesture";
 
 const checkpoints = waypointStops.slice(1);
-const landingPause = 500;
-const continuedScroll = 160;
+export type VoyageNavigationFlight = {
+  id: number;
+  from: number;
+  to: number;
+  amount: number;
+};
 const longerFlights = [
   [0, visits[0].parked],
   [visits[1].departure, visits[2].parked],
@@ -44,33 +55,54 @@ export function useVoyageProgress(
   finalReady: boolean,
 ) {
   const progress = useMotionValue(0);
+  const navigationOpacity = useMotionValue(1);
+  const navigationFlight = useMotionValue<VoyageNavigationFlight | null>(null);
+  const navigationSequence = useRef(0);
+  const [navigationTarget, setNavigationTarget] = useState<number | null>(null);
   const finalReadyRef = useRef(finalReady);
+  const cueIssued = useRef(false);
+  const startCueRef = useRef<() => void>(() => {});
+  const stopCueRef = useRef<() => void>(() => {});
   useEffect(() => {
     finalReadyRef.current = finalReady;
-  }, [finalReady]);
+    if (!finalReady) {
+      cueIssued.current = false;
+      stopCueRef.current();
+    } else if (enabled && !cueIssued.current) {
+      cueIssued.current = true;
+      startCueRef.current();
+    }
+  }, [finalReady, enabled]);
   const seekRef = useRef<(p: number) => void>(() => {});
   const prepareSeek = useCallback((p: number) => seekRef.current(p), []);
+  const navigateRef = useRef<(p: number) => void>(() => {});
+  const navigateTo = useCallback((p: number) => navigateRef.current(p), []);
   useEffect(() => {
     if (!enabled) return;
     let frame = 0,
       previousTime = 0,
       velocity = 0,
-      lastIntent = 0,
-      lastGesture = 0;
+      lastIntent = 0;
+    const gesture = new ScrollGesture();
+    let directSeek: {
+      id: number;
+      point: number;
+      from: number;
+      started: number;
+      fadeFrom: number;
+      fadeDuration: number;
+      travelDuration: number;
+      revealDelay: number;
+      revealDuration: number;
+      arrived: boolean;
+    } | null = null;
     let gate: {
       point: number;
       arrived: number;
-      fullPause: boolean;
-      intent: number;
-      lastAmount: number;
     } | null = null;
-    let overviewLandingAt: number | null = null;
-    let overviewSection: HTMLElement | null = null;
-    let overviewLastInputAt = 0;
-    let overviewIntent = 0;
-    let overviewLastAmount = 0;
-    let overviewTransition: { top: number; started: number } | null = null;
-    let overviewFrame = 0;
+    let nativeExit = false;
+    let cue: { from: number; distance: number; started: number } | null = null;
+    let cueFrame = 0;
     const trackElement = track.current;
     let wasBelow = false,
       previousNativeY = scrollY;
@@ -89,7 +121,10 @@ export function useVoyageProgress(
     }
     function inside() {
       const b = bounds();
-      return !!b && scrollY >= b.start - 2 && scrollY <= b.start + b.length + 2;
+      return (
+        !nativeExit && !!b &&
+        scrollY >= b.start - 2 && scrollY <= b.start + b.length + 2
+      );
     }
     function scrollToPoint(p: number) {
       const b = bounds();
@@ -100,23 +135,15 @@ export function useVoyageProgress(
       if (track.current)
         track.current.dataset.scrollCheckpoint = gate ? "reading" : "flight";
     }
-    function canRelease(fresh: boolean, direction: number, amount: number) {
+    function canRelease(deliberate: boolean) {
       if (!gate) return true;
       const age = performance.now() - gate.arrived,
         final = gate.point === waypointStops.at(-1);
-      if (final && direction > 0 && !finalReadyRef.current) return false;
-      if (!final || (gate.fullPause && direction < 0)) {
-        const decaying = amount < gate.lastAmount * 0.9;
-        gate.lastAmount = amount;
-        const pause = final ? landingPause : 350;
-        if (age < pause) {
-          gate.intent = 0;
-          return false;
-        }
-        gate.intent = decaying ? 0 : gate.intent + amount;
-        return fresh || gate.intent >= continuedScroll;
-      }
-      return age > 350 || (fresh && age > 200);
+      // The hint, unlock and physical scroll cue begin together after the
+      // final text has settled. Input ignored before then is never replayed.
+      if (final && !finalReadyRef.current) return false;
+      if (!final && age < 350) return false;
+      return deliberate;
     }
     function nextPoint(current: number, destination: number) {
       const direction = Math.sign(destination - current);
@@ -137,15 +164,11 @@ export function useVoyageProgress(
                 point < current - 0.000005 && point >= destination - 0.0002,
             );
     }
-    function arrive(point: number, fullPause = false) {
+    function arrive(point: number) {
       gate = {
         point,
         arrived: performance.now(),
-        fullPause,
-        intent: 0,
-        lastAmount: 0,
       };
-      lastGesture = performance.now();
       bypass = null;
       pending = null;
       newTouch = false;
@@ -159,98 +182,123 @@ export function useVoyageProgress(
     function schedule() {
       if (!frame) frame = requestAnimationFrame(tick);
     }
-    function clearOverviewTransition() {
-      cancelAnimationFrame(overviewFrame);
-      overviewFrame = 0;
-      overviewTransition = null;
-      if (track.current) delete track.current.dataset.voyageLeaving;
+    function stopCue() {
+      cancelAnimationFrame(cueFrame);
+      cueFrame = 0;
+      cue = null;
+      if (trackElement) delete trackElement.dataset.voyageCue;
     }
-    function followOverview(time: number) {
-      overviewFrame = 0;
-      if (!overviewTransition) return;
-      const arrived = Math.abs(scrollY - overviewTransition.top) < 1.5;
-      if (arrived || time - overviewTransition.started > 1500) {
-        clearOverviewTransition();
-        overviewLandingAt = arrived ? time : null;
-        overviewIntent = 0;
-        return;
-      }
-      overviewFrame = requestAnimationFrame(followOverview);
-    }
-    function enterOverview(section = document.getElementById("sobre")) {
-      if (!section) return false;
-      overviewSection = section;
-      const top = section.getBoundingClientRect().top + scrollY - header;
-      clearOverviewTransition();
-      overviewLandingAt = null;
-      overviewIntent = 0;
-      overviewLastAmount = 0;
-      overviewLastInputAt = performance.now();
-      overviewTransition = { top, started: performance.now() };
-      if (track.current) track.current.dataset.voyageLeaving = "true";
-      progress.set(1);
+    function followCue(time: number) {
+      cueFrame = 0;
+      const current = cue;
+      if (!current) return;
+      const amount = smoothRange(0, 220, Math.max(0, time - current.started));
       window.scrollTo({
-        top,
-        behavior: "smooth",
+        top: current.from + current.distance * amount,
+        behavior: "instant",
       });
-      overviewFrame = requestAnimationFrame(followOverview);
-      schedule();
-      return true;
+      if (amount < 1) cueFrame = requestAnimationFrame(followCue);
+      else {
+        stopCue();
+        // Explicitly let go: one gravity controller now owns the return.
+        window.dispatchEvent(new Event("landing-scroll-release"));
+      }
     }
-    function holdOverview(delta: number, event: Event) {
-      const now = performance.now();
-      const freshGesture =
-        event.type === "keydown"
-          ? !(event as KeyboardEvent).repeat
-          : now - overviewLastInputAt > 160;
-      overviewLastInputAt = now;
-      const amount = Math.abs(delta);
-      const decaying = amount < overviewLastAmount * 0.9;
-      overviewLastAmount = amount;
-      if (overviewTransition) {
-        if (delta < 0) {
-          clearOverviewTransition();
-          if (event.cancelable) event.preventDefault();
-          window.scrollTo({ top: scrollY + delta, behavior: "instant" });
-          return true;
+    startCueRef.current = () => {
+      const b = bounds();
+      if (!b || directSeek || progress.get() < finale.sealed) return;
+      const end = b.start + b.length;
+      if (Math.abs(scrollY - end) > 2) return;
+      cue = {
+        from: scrollY,
+        distance: Math.min(28, Math.max(18, (innerHeight - header) * 0.03)),
+        started: performance.now(),
+      };
+      if (trackElement) trackElement.dataset.voyageCue = "peek";
+      nativeExit = true;
+      gate = null;
+      pending = null;
+      bypass = null;
+      velocity = 0;
+      progress.set(1);
+      mark();
+      cueFrame = requestAnimationFrame(followCue);
+    };
+    stopCueRef.current = stopCue;
+    function clearDirectSeek() {
+      directSeek = null;
+      navigationFlight.set(null);
+      navigationOpacity.set(1);
+      setNavigationTarget(null);
+      if (track.current) delete track.current.dataset.voyageNavigation;
+    }
+    function followDirectSeek(time: number) {
+      const seek = directSeek;
+      if (!seek) return;
+      const elapsed = time - seek.started;
+      const travelEnd = seek.fadeDuration + seek.travelDuration;
+      if (elapsed < seek.fadeDuration) {
+        navigationOpacity.set(
+          seek.fadeFrom * (1 - smoothRange(0, seek.fadeDuration, elapsed)),
+        );
+      } else if (elapsed < travelEnd) {
+        navigationOpacity.set(0);
+        if (track.current) track.current.dataset.voyageNavigation = "travel";
+        const t = Math.max(
+          0,
+          Math.min(1, (elapsed - seek.fadeDuration) / seek.travelDuration),
+        );
+        const amount = t * t * (3 - 2 * t);
+        navigationFlight.set({
+          id: seek.id,
+          from: seek.from,
+          to: seek.point,
+          amount,
+        });
+        progress.set(seek.from + (seek.point - seek.from) * amount);
+      } else {
+        if (!seek.arrived) {
+          seek.arrived = true;
+          navigationFlight.set({
+            id: seek.id,
+            from: seek.from,
+            to: seek.point,
+            amount: 1,
+          });
+          arrive(seek.point);
+          if (seek.point === 0) {
+            gate = null;
+            mark();
+          }
+          if (track.current) track.current.dataset.voyageNavigation = "reveal";
         }
-        if (delta > 0) {
-          if (event.cancelable) event.preventDefault();
-          return true;
+        const revealStart = travelEnd + seek.revealDelay;
+        navigationOpacity.set(
+          smoothRange(revealStart, revealStart + seek.revealDuration, elapsed),
+        );
+        if (elapsed >= revealStart + seek.revealDuration) {
+          clearDirectSeek();
+          previousTime = 0;
+          return;
         }
       }
-      if (overviewLandingAt === null) return false;
-      if (!delta) return false;
-      const age = now - overviewLandingAt;
-      if (age < landingPause) overviewIntent = 0;
-      else overviewIntent = decaying ? 0 : overviewIntent + amount;
-      if (
-        delta < 0 ||
-        (age >= landingPause &&
-          (freshGesture || overviewIntent >= continuedScroll))
-      ) {
-        overviewLandingAt = null;
-        const next = overviewSection?.nextElementSibling;
-        if (
-          delta > 0 &&
-          overviewSection &&
-          overviewSection.getBoundingClientRect().height <=
-            innerHeight - header + 2 &&
-          next instanceof HTMLElement &&
-          next.hasAttribute("data-snap-section")
-        ) {
-          if (event.cancelable) event.preventDefault();
-          return enterOverview(next);
-        }
-        return false;
-      }
-      // Discard momentum during the pause. Sustained input can still resume
-      // the journey without requiring a break between wheel events.
-      if (event.cancelable) event.preventDefault();
-      return true;
+      schedule();
+    }
+    function leaveVoyage(delta: number) {
+      // Hand over only this event's distance. The following sections use native
+      // scrolling and an interruptible magnet; there is no landing lock.
+      nativeExit = true;
+      gate = null;
+      pending = null;
+      bypass = null;
+      velocity = 0;
+      progress.set(1);
+      mark();
+      window.scrollTo({ top: scrollY + delta, behavior: "instant" });
     }
     function release(direction: number, delta: number) {
       if (!gate) return;
+      lastIntent = performance.now();
       const point = gate.point,
         index = checkpoints.indexOf(point),
         visit = visits[index];
@@ -260,7 +308,10 @@ export function useVoyageProgress(
       pending = null;
       velocity = 0;
       mark();
-      if (!visit && direction > 0 && enterOverview()) return;
+      if (!visit && direction > 0) {
+        leaveVoyage(delta);
+        return;
+      }
       const b = bounds();
       const edge = visit
         ? direction > 0
@@ -276,6 +327,17 @@ export function useVoyageProgress(
       schedule();
     }
     function tick(time: number) {
+      if (nativeExit) {
+        progress.set(1);
+        frame = 0;
+        previousTime = 0;
+        return;
+      }
+      if (directSeek) {
+        frame = 0;
+        followDirectSeek(time);
+        return;
+      }
       const dt = Math.min(
         previousTime ? (time - previousTime) / 1000 : 1 / 60,
         0.032,
@@ -283,6 +345,16 @@ export function useVoyageProgress(
       previousTime = time;
       const current = progress.get(),
         raw = target.get();
+      if (
+        inside() && !gate && current >= finale.sealed && raw >= current &&
+        current < waypointStops.at(-1)! && pending !== waypointStops.at(-1)
+      ) {
+        // Finish the stationary logo view before its text appears. Its final
+        // reading anchor is also the exact start of the first slide boundary.
+        pending = waypointStops.at(-1)!;
+        target.set(pending);
+        scrollToPoint(pending);
+      }
       if (!inside()) {
         gate = null;
         pending = null;
@@ -360,7 +432,8 @@ export function useVoyageProgress(
         finalReadyRef.current && current >= checkpoints.at(-1)! - 0.00001;
       if (canLeave && delta > 0) {
         if (event.cancelable) event.preventDefault();
-        if (enterOverview()) return;
+        leaveVoyage(delta);
+        return;
       }
       const proposed = Math.min(
           canLeave ? Infinity : checkpoints.at(-1)!,
@@ -378,7 +451,6 @@ export function useVoyageProgress(
       schedule();
     }
     function reenterFinal() {
-      clearOverviewTransition();
       cancelAnimationFrame(frame);
       frame = 0;
       previousTime = 0;
@@ -387,9 +459,9 @@ export function useVoyageProgress(
       pending = null;
       bypass = null;
       wasBelow = false;
-      overviewLandingAt = null;
       if (track.current) delete track.current.dataset.voyageSkip;
-      arrive(waypointStops.at(-1)!, true);
+      nativeExit = false;
+      arrive(waypointStops.at(-1)!);
       previousNativeY = scrollY;
     }
     function navigation(event: MouseEvent) {
@@ -398,18 +470,42 @@ export function useVoyageProgress(
           ? event.target.closest<HTMLAnchorElement>('a[href^="#"]')
           : null;
       if (anchor && ["#sobre", "#equip", "#pilot"].includes(anchor.hash)) {
-        clearOverviewTransition();
-        overviewLandingAt = null;
+        if (directSeek) clearDirectSeek();
         allowNativeJumpUntil = performance.now() + 1200;
         if (track.current) track.current.dataset.voyageSkip = "true";
       }
+    }
+    function navigate(event: Event) {
+      stopCue();
+      const home = (event as CustomEvent<string>).detail === "idea";
+      clearDirectSeek();
+      cancelAnimationFrame(frame);
+      frame = 0;
+      previousTime = 0;
+      velocity = 0;
+      gate = null;
+      ignored = null;
+      pending = null;
+      bypass = null;
+      allowNativeJumpUntil = performance.now() + 1200;
+      wasBelow = !home;
+      nativeExit = !home;
+      if (track.current) {
+        if (home) delete track.current.dataset.voyageSkip;
+        else track.current.dataset.voyageSkip = "true";
+      }
+      progress.set(home ? 0 : 1);
+      target.set(home ? 0 : 1);
+      previousNativeY = home ? 0 : scrollY;
+      mark();
     }
     function nativeScroll() {
       const b = bounds();
       if (!b) return;
       const y = scrollY,
         end = b.start + b.length;
-      if (wasBelow && y <= end + 2 && y >= b.start - 2) {
+      const finalY = b.start + b.length * waypointStops.at(-1)!;
+      if (nativeExit && y <= finalY + 1 && y >= b.start - 2) {
         reenterFinal();
         return;
       }
@@ -431,6 +527,8 @@ export function useVoyageProgress(
         return;
       }
       wasBelow = y > end + 2;
+      if (wasBelow && (finalReadyRef.current || performance.now() <= allowNativeJumpUntil))
+        nativeExit = true;
       previousNativeY = y;
     }
     function wheel(event: WheelEvent) {
@@ -439,20 +537,28 @@ export function useVoyageProgress(
       const delta =
         event.deltaY *
         (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
-      if (holdOverview(delta, event) || !inside()) return;
-      const now = performance.now(),
-        quiet = now - lastGesture;
-      lastGesture = now;
-      lastIntent = now;
+      const deliberate = gesture.read(delta, performance.now());
+      if (cue) {
+        if (!deliberate) {
+          if (event.cancelable) event.preventDefault();
+          return;
+        }
+        stopCue();
+      }
+      if (directSeek) {
+        if (event.cancelable) event.preventDefault();
+        return;
+      }
+      if (!inside()) return;
       if (!delta) return;
       if (gate) {
         event.preventDefault();
-        if (canRelease(quiet > 140, Math.sign(delta), Math.abs(delta)))
-          release(Math.sign(delta), delta);
+        if (canRelease(deliberate)) release(Math.sign(delta), delta);
         else scrollToPoint(gate.point);
         return;
       }
       bypass = null;
+      lastIntent = performance.now();
       consumeDelta(delta, event);
     }
     function key(event: KeyboardEvent) {
@@ -489,65 +595,63 @@ export function useVoyageProgress(
           : ["PageDown", "PageUp", " "].includes(event.key)
             ? innerHeight * 0.8
             : 70);
-      if (holdOverview(delta, event) || !inside()) return;
-      lastIntent = performance.now();
+      const deliberate = gesture.read(delta, performance.now(), !event.repeat);
+      if (cue) stopCue();
+      if (directSeek) {
+        if (event.cancelable) event.preventDefault();
+        return;
+      }
+      if (!inside()) return;
       if (gate) {
         event.preventDefault();
-        if (canRelease(!event.repeat, direction, Math.abs(delta)))
+        if (canRelease(deliberate))
           release(direction, delta);
       } else {
+        lastIntent = performance.now();
         consumeDelta(delta, event);
       }
     }
     function touchStart(event: TouchEvent) {
+      stopCue();
       if (event.touches.length !== 1) {
         touchY = null;
         newTouch = false;
         return;
       }
       touchY = event.touches[0]?.clientY ?? 0;
-      newTouch = !!gate && performance.now() - gate.arrived > 400;
+      newTouch = true;
     }
     function touchMove(event: TouchEvent) {
-      if (
-        (overviewTransition !== null || overviewLandingAt !== null) &&
-        touchY !== null &&
-        event.touches.length === 1 &&
-        holdOverview(touchY - event.touches[0].clientY, event)
-      ) {
-        touchY = event.touches[0].clientY;
-        return;
-      }
-      if (!inside()) return;
-      if (event.touches.length !== 1) {
+      if (touchY === null || event.touches.length !== 1) {
         touchY = null;
         return;
       }
       const y = event.touches[0].clientY;
-      if (touchY === null) {
-        touchY = y;
-        return;
-      }
       const delta = touchY - y;
       touchY = y;
-      lastIntent = performance.now();
+      const deliberate = gesture.read(delta, performance.now(), newTouch);
+      if (delta) newTouch = false;
+      if (directSeek && event.touches.length === 1) {
+        if (event.cancelable) event.preventDefault();
+        return;
+      }
+      if (!inside()) return;
       if (gate) {
         event.preventDefault();
-        if (
-          canRelease(newTouch, Math.sign(delta), Math.abs(delta)) &&
-          delta !== 0
-        ) {
+        if (canRelease(deliberate) && delta !== 0) {
           newTouch = false;
           release(Math.sign(delta), delta);
         }
       } else {
+        lastIntent = performance.now();
         consumeDelta(delta, event);
       }
     }
     seekRef.current = (point) => {
-      clearOverviewTransition();
-      overviewLandingAt = null;
+      stopCue();
+      if (directSeek) clearDirectSeek();
       if (track.current) delete track.current.dataset.voyageSkip;
+      nativeExit = false;
       gate = null;
       ignored = null;
       pending = null;
@@ -556,31 +660,118 @@ export function useVoyageProgress(
       mark();
       schedule();
     };
+    navigateRef.current = (point) => {
+      stopCue();
+      if (directSeek?.point === point) return;
+      if (!directSeek && Math.abs(progress.get() - point) < 0.00001) return;
+      cancelAnimationFrame(frame);
+      frame = 0;
+      previousTime = 0;
+      if (track.current) {
+        delete track.current.dataset.voyageSkip;
+        track.current.dataset.voyageNavigation = "fade";
+      }
+      gate = null;
+      ignored = null;
+      pending = null;
+      bypass = null;
+      velocity = 0;
+      nativeExit = false;
+      const from = progress.get();
+      const fadeFrom = navigationOpacity.get();
+      directSeek = {
+        id: ++navigationSequence.current,
+        point,
+        from,
+        fadeFrom,
+        started: performance.now(),
+        fadeDuration: 110 * fadeFrom,
+        travelDuration: 750 + 1450 * Math.abs(point - from),
+        revealDelay: point === 0 || point >= finale.sealed ? 140 : 0,
+        revealDuration: point === 0 || point >= finale.sealed ? 480 : 150,
+        arrived: false,
+      };
+      navigationFlight.set({ id: directSeek.id, from, to: point, amount: 0 });
+      setNavigationTarget(point);
+      mark();
+      schedule();
+    };
     const unsubscribe = target.on("change", schedule);
+    function revealClearedEndpoint(event: Event) {
+      if (
+        !directSeek ||
+        (event as CustomEvent<number>).detail !== directSeek.id
+      )
+        return;
+      // There is no reason to keep travelling across an empty screen once the
+      // final visible planet has left the frame on a direct endpoint jump.
+      directSeek.travelDuration = Math.min(
+        directSeek.travelDuration,
+        Math.max(
+          0,
+          performance.now() - directSeek.started - directSeek.fadeDuration,
+        ),
+      );
+      schedule();
+    }
+    trackElement?.addEventListener(
+      "voyage-endpoint-clear",
+      revealClearedEndpoint,
+    );
     const initialBounds = bounds();
     wasBelow =
       !!initialBounds &&
       scrollY > initialBounds.start + initialBounds.length + 2;
+    nativeExit = wasBelow;
     window.addEventListener("scroll", nativeScroll, { passive: true });
+    window.addEventListener("pointerdown", stopCue, { passive: true });
+    window.addEventListener("resize", stopCue);
     window.addEventListener("click", navigation);
+    window.addEventListener("landing-navigate", navigate);
     window.addEventListener("wheel", wheel, { passive: false });
     window.addEventListener("keydown", key);
     window.addEventListener("touchstart", touchStart, { passive: true });
     window.addEventListener("touchmove", touchMove, { passive: false });
     schedule();
     return () => {
-      clearOverviewTransition();
+      stopCue();
+      startCueRef.current = () => {};
+      stopCueRef.current = () => {};
       unsubscribe();
+      trackElement?.removeEventListener(
+        "voyage-endpoint-clear",
+        revealClearedEndpoint,
+      );
       cancelAnimationFrame(frame);
       seekRef.current = () => {};
+      navigateRef.current = () => {};
+      clearDirectSeek();
       window.removeEventListener("wheel", wheel);
       window.removeEventListener("keydown", key);
       window.removeEventListener("touchstart", touchStart);
       window.removeEventListener("touchmove", touchMove);
       window.removeEventListener("scroll", nativeScroll);
+      window.removeEventListener("pointerdown", stopCue);
+      window.removeEventListener("resize", stopCue);
       window.removeEventListener("click", navigation);
+      window.removeEventListener("landing-navigate", navigate);
       if (trackElement) delete trackElement.dataset.scrollCheckpoint;
     };
-  }, [target, progress, track, header, enabled]);
-  return { progress, prepareSeek };
+  }, [
+    target,
+    progress,
+    navigationOpacity,
+    navigationFlight,
+    track,
+    header,
+    enabled,
+  ]);
+  return {
+    progress,
+    prepareSeek,
+    navigateTo,
+    navigationOpacity,
+    navigationTarget,
+    navigationFlight,
+  };
 }

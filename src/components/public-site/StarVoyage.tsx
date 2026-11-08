@@ -1,9 +1,9 @@
 ﻿"use client";
 
-import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import {
   motion,
   useMotionValueEvent,
@@ -15,9 +15,12 @@ import { usePublicLocale } from "./PublicShell";
 import { voyageCopy } from "./voyage-copy";
 import { finale, visits, voyageState, waypointStops } from "./voyage-timeline";
 import { useVoyageProgress } from "./voyage-progress";
+import { VoyageLoader, type VoyageSceneState } from "./VoyageLoader";
 import styles from "./voyage.module.css";
 
-const Scene = dynamic(() => import("./StarVoyageScene"), { ssr: false });
+const Scene = dynamic(() => import("./StarVoyageScene"), {
+  ssr: false,
+});
 const reducedQuery = "(prefers-reduced-motion: reduce), (max-height: 620px)";
 function subscribe(callback: () => void) {
   const media = window.matchMedia(reducedQuery);
@@ -46,38 +49,51 @@ export function StarVoyage() {
   const locale = usePublicLocale(),
     copy = voyageCopy[locale];
   const track = useRef<HTMLElement>(null),
-    navigation = useRef<HTMLElement>(null),
-    finalePanel = useRef<HTMLDivElement>(null),
-    finaleFocus = useRef(false);
+    navigation = useRef<HTMLElement>(null);
   const reduced = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   const headerHeight = useSyncExternalStore(
     subscribeWidth,
     headerSnapshot,
     serverHeader,
   );
-  const [reading, setReading] = useState(false),
-    [active, setActive] = useState({ chapter: 0, reading: true });
+  const [active, setActive] = useState({ chapter: 0, reading: true });
   const [logoFormed, setLogoFormed] = useState(false),
     [finalTextReady, setFinalTextReady] = useState(false);
-  const linear = reduced || reading;
+  const [finalExitReady, setFinalExitReady] = useState(false);
+  const [directFinal, setDirectFinal] = useState(false);
+  const [sceneState, setSceneState] = useState<VoyageSceneState>("loading");
+  const linear = reduced;
   const { scrollYProgress: scrollTarget } = useScroll({
     target: track,
     offset: [`start ${headerHeight}px`, "end end"],
   });
-  const { progress, prepareSeek } = useVoyageProgress(
+  const {
+    progress,
+    prepareSeek,
+    navigateTo,
+    navigationOpacity,
+    navigationTarget,
+    navigationFlight,
+  } = useVoyageProgress(
     scrollTarget,
     track,
     headerHeight,
     !linear,
-    finalTextReady,
+    finalExitReady,
   );
+  useEffect(() => {
+    if (linear || !finalTextReady || navigationTarget !== null) return;
+    const timer = window.setTimeout(() => setFinalExitReady(true), 650);
+    return () => window.clearTimeout(timer);
+  }, [linear, finalTextReady, navigationTarget]);
+  const scrollHintOpacity = useTransform(progress, [0, 0.012], [1, 0]);
   useMotionValueEvent(progress, "change", (p) => {
     const formed = p >= finale.sealed;
-    if (formed !== logoFormed) {
-      finaleFocus.current =
-        formed && !!navigation.current?.contains(document.activeElement);
-      setLogoFormed(formed);
-      if (!formed) setFinalTextReady(false);
+    setLogoFormed(formed);
+    if (!formed) {
+      setFinalTextReady(false);
+      setFinalExitReady(false);
+      setDirectFinal(false);
     }
     const state = voyageState(p),
       chapter =
@@ -94,12 +110,22 @@ export function StarVoyage() {
         : { chapter, reading: isReading },
     );
   });
-  function seek(index: number) {
+  function seek(index: number, direct = false) {
+    if (
+      document.querySelector<HTMLElement>("[data-descent-root]")?.dataset
+        .motionBusy === "true"
+    )
+      return;
     const element = track.current;
     if (!element) return;
     navigation.current
       ?.querySelector<HTMLButtonElement>(`[data-stop="${index}"]`)
       ?.focus({ preventScroll: true });
+    setDirectFinal(direct && index === waypointStops.length - 1);
+    if (direct) {
+      navigateTo(waypointStops[index]);
+      return;
+    }
     const top = element.getBoundingClientRect().top + scrollY - headerHeight;
     const length = element.offsetHeight - innerHeight + headerHeight;
     prepareSeek(waypointStops[index]);
@@ -108,105 +134,115 @@ export function StarVoyage() {
       behavior: "instant",
     });
   }
-  function switchToReading() {
-    setReading(true);
-    track.current?.scrollIntoView({ behavior: "instant", block: "start" });
-  }
   return (
     <section
       id="idea"
       ref={track}
       className={`${styles.track} ${linear ? styles.linearTrack : ""}`}
       aria-label={copy.genre}
-      data-voyage-complete={linear || finalTextReady}
+      data-voyage-complete={linear || finalExitReady}
     >
       {!linear && (
-        <div className={styles.stage} data-voyage-stage>
+        <div
+          className={styles.stage}
+          data-voyage-stage
+          data-scene-state={sceneState}
+        >
           <div className={styles.starfield} aria-hidden="true" />
           <div className={styles.cosmos} aria-hidden="true">
-            <Scene key={locale} progress={progress} />
+            <Scene
+              key={locale}
+              progress={progress}
+              navigationOpacity={navigationOpacity}
+              navigationFlight={navigationFlight}
+              onStateChange={setSceneState}
+            />
           </div>
+          <VoyageLoader state={sceneState} />
           <div className={styles.readingSpotlight} aria-hidden="true" />
-          <div className={styles.topControls}>
-            <button onClick={switchToReading}>{copy.readStory}</button>
-            <a href="#pilot">
-              {copy.skip}
-              <ArrowUpRight size={12} aria-hidden="true" />
-            </a>
-          </div>
-          <VoyageFrame
-            progress={progress}
-            index={-1}
-            active={active.chapter === 0 && active.reading}
+          <motion.div
+            className={styles.copyLayer}
+            style={{ opacity: navigationOpacity }}
           >
-            <p className={styles.genre}>{copy.genre}</p>
-            <h1>{copy.heroTitle}</h1>
-            <p className={styles.description}>{copy.heroBody}</p>
-            <button className={styles.departure} onClick={() => seek(1)}>
-              {copy.start}
-              <ArrowDownRight size={17} aria-hidden="true" />
-            </button>
-            <p className={styles.prototype}>{copy.prototype}</p>
-          </VoyageFrame>
-          {copy.planets.map((planet, index) => (
+            <motion.span
+              className={styles.scrollHint}
+              style={{ opacity: scrollHintOpacity }}
+              aria-hidden={active.chapter !== 0 || navigationTarget !== null}
+            >
+              <i aria-hidden="true" />
+              {copy.scroll}
+            </motion.span>
             <VoyageFrame
               progress={progress}
-              index={index}
-              active={active.chapter === index + 1 && active.reading}
-              key={planet.name}
-            >
-              <h2>{planet.title}</h2>
-              <p className={styles.description}>{planet.body}</p>
-            </VoyageFrame>
-          ))}
-          <motion.div
-            ref={finalePanel}
-            data-voyage-final
-            className={styles.finale}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: logoFormed ? 1 : 0, y: logoFormed ? 0 : 14 }}
-            transition={{
-              duration: logoFormed ? 1.35 : 0.16,
-              delay: logoFormed ? 0.14 : 0,
-              ease: [0.45, 0, 0.25, 1],
-            }}
-            onAnimationComplete={() => {
-              setFinalTextReady(logoFormed);
-              if (
-                logoFormed &&
-                finaleFocus.current &&
-                document.activeElement === document.body
-              ) {
-                finalePanel.current
-                  ?.querySelector<HTMLAnchorElement>("a")
-                  ?.focus({ preventScroll: true });
+              index={-1}
+              active={
+                navigationTarget === null &&
+                active.chapter === 0 &&
+                active.reading
               }
-              finaleFocus.current = false;
-            }}
-            inert={active.chapter !== visits.length + 1 || !finalTextReady}
-          >
-            <p className={styles.wordmark}>
-              physics<span>stars</span>
-            </p>
-            <h2>{copy.finalTitle}</h2>
-            <p>{copy.finalBody}</p>
-            <a href="#sobre">
-              {copy.overview.label}
-              <ArrowDownRight size={15} aria-hidden="true" />
-            </a>
+            >
+              <h1>{copy.heroTitle}</h1>
+              <p className={styles.description}>{copy.heroBody}</p>
+            </VoyageFrame>
+            {copy.planets.map((planet, index) => (
+              <VoyageFrame
+                progress={progress}
+                index={index}
+                active={
+                  navigationTarget === null &&
+                  active.chapter === index + 1 &&
+                  active.reading
+                }
+                key={planet.name}
+              >
+                <h2>{planet.title}</h2>
+                <p className={styles.description}>{planet.body}</p>
+              </VoyageFrame>
+            ))}
+            <motion.div
+              data-voyage-final
+              className={styles.finale}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: logoFormed ? 1 : 0, y: logoFormed ? 0 : 14 }}
+              transition={{
+                duration: logoFormed ? (directFinal ? 0.55 : 1.35) : 0.16,
+                delay: logoFormed ? 0.14 : 0,
+                ease: [0.45, 0, 0.25, 1],
+              }}
+              onAnimationComplete={() => {
+                setFinalTextReady(logoFormed);
+              }}
+              inert={
+                navigationTarget !== null ||
+                active.chapter !== visits.length + 1 ||
+                !finalTextReady
+              }
+            >
+              <p className={styles.wordmark}>
+                physics<span>stars</span>
+              </p>
+              <h2>{copy.finalTitle}</h2>
+              <p>{copy.finalBody}</p>
+              <motion.div
+                className={styles.continueHint}
+                data-voyage-continue
+                initial={{ opacity: 0, y: 6 }}
+                animate={{
+                  opacity: finalExitReady && navigationTarget === null ? 1 : 0,
+                  y: finalExitReady && navigationTarget === null ? 0 : 6,
+                }}
+                transition={{
+                  duration: 0.45,
+                  ease: "easeOut",
+                }}
+                aria-hidden="true"
+              >
+                {copy.continueScroll}
+                <ArrowDown size={17} strokeWidth={1.4} />
+              </motion.div>
+            </motion.div>
           </motion.div>
-          <div
-            className={styles.bottomControls}
-            inert={logoFormed}
-            style={{
-              opacity: logoFormed ? 0 : 1,
-              pointerEvents: logoFormed ? "none" : undefined,
-            }}
-          >
-            <span className={styles.scrollHint}>
-              <i />
-              {copy.scroll}
-            </span>
+          <div className={styles.bottomControls}>
             <nav
               ref={navigation}
               className={styles.stops}
@@ -220,15 +256,22 @@ export function StarVoyage() {
                 <button
                   data-stop={index}
                   key={index}
-                  onClick={() => seek(index)}
+                  onClick={() => seek(index, true)}
                   aria-label={label}
-                  aria-current={active.chapter === index ? "step" : undefined}
+                  aria-current={
+                    (
+                      navigationTarget === null
+                        ? active.chapter === index
+                        : waypointStops[index] === navigationTarget
+                    )
+                      ? "step"
+                      : undefined
+                  }
                 >
                   <span />
                 </button>
               ))}
             </nav>
-            <span className={styles.destination}>Physics Stars</span>
           </div>
         </div>
       )}
@@ -236,7 +279,6 @@ export function StarVoyage() {
         <div className={styles.reading}>
           <div className={styles.readingIntro}>
             <Image src="/logo.svg" width={100} height={100} alt="" />
-            <p className={styles.genre}>{copy.genre}</p>
             <h1>{copy.heroTitle}</h1>
             <p>{copy.heroBody}</p>
           </div>

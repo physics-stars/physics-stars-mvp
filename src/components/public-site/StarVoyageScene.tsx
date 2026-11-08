@@ -5,6 +5,8 @@ import Image from "next/image";
 import { voyageCameraX } from "./voyage-camera";
 import type { MotionValue } from "framer-motion";
 import type * as ThreeTypes from "three";
+import type { VoyageNavigationFlight } from "./voyage-progress";
+import type { VoyageSceneState } from "./VoyageLoader";
 import {
   clamp01,
   finale,
@@ -13,19 +15,36 @@ import {
   voyageState,
 } from "./voyage-timeline";
 
-type Props = { progress?: MotionValue<number>; compact?: boolean };
+type Props = {
+  progress?: MotionValue<number>;
+  compact?: boolean;
+  navigationOpacity?: MotionValue<number>;
+  navigationFlight?: MotionValue<VoyageNavigationFlight | null>;
+  onStateChange?: (state: VoyageSceneState) => void;
+};
 
 /** One deterministic timeline owns camera, flight, stops, occlusion and the final logo. */
-export default function StarVoyageScene({ progress, compact = false }: Props) {
+export default function StarVoyageScene({
+  progress,
+  compact = false,
+  navigationOpacity,
+  navigationFlight,
+  onStateChange,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fallbackRef = useRef<HTMLDivElement>(null);
   const sealedLogoRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = hostRef.current,
       canvas = canvasRef.current;
     if (!host || !canvas) return;
+    function loadingState(state: VoyageSceneState) {
+      if (disposed || host!.dataset.sceneState === state) return;
+      host!.dataset.sceneState = state;
+      onStateChange?.(state);
+    }
     let disposed = false;
+    loadingState("loading");
     let cleanup: (() => void) | undefined;
     async function initialise() {
       const [
@@ -67,6 +86,7 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
         logo.dispose();
         planets.dispose();
         traveller.dispose();
+        loadingState("unavailable");
         return;
       }
       renderer.setClearColor(0, 0);
@@ -151,6 +171,8 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
         previousOrbit = false;
       let lightFocus = 0,
         previousLightTime = 0;
+      let navigationId = -1,
+        navigationCameraFrom = 0;
       const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
       const temp = new THREE.Vector3();
       const finalCenter = new THREE.Vector3();
@@ -272,10 +294,12 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
       });
       let ringsEnterAt = finale.start + 0.034;
       let ringsReadyAt = finale.start + 0.049;
+      let clearedNavigation = -1;
       function render() {
         frame = 0;
         if (disposed || !visible || document.hidden) return;
         const p = preference.matches ? 0.12 : clamp01(progress?.get() ?? 0);
+        const navigationVisibility = navigationOpacity?.get() ?? 1;
         const state = voyageState(p),
           seal = smoothRange(finale.settled, finale.sealed, p);
         const lightTime = performance.now();
@@ -290,7 +314,20 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
             Math.exp(-lightDelta / (state.light > lightFocus ? 0.11 : 0.14)));
         const focusSettled = Math.abs(state.light - lightFocus) < 0.002;
         if (focusSettled) lightFocus = state.light;
-        const cameraX = viewCameraXAt(p);
+        const flight = navigationFlight?.get();
+        if (flight && flight.id !== navigationId) {
+          navigationId = flight.id;
+          navigationCameraFrom = renderedFrames
+            ? camera.position.x
+            : viewCameraXAt(flight.from);
+        }
+        const cameraX = flight
+          ? THREE.MathUtils.lerp(
+              navigationCameraFrom,
+              viewCameraXAt(flight.to),
+              flight.amount,
+            )
+          : viewCameraXAt(p);
         camera.position.set(cameraX, 0, narrow ? 11 : 16);
         camera.lookAt(cameraX, 0, 0);
         key.position.set(cameraX - 5, 5, 8);
@@ -315,7 +352,7 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
           (1 - smoothRange(ringsEnter, ringsReady, p));
         logo.group.position.set(cameraX + ringOffset, transform.y, 0);
         logo.group.scale.setScalar(transform.scale);
-        logo.group.visible = p > ringsEnter;
+        logo.group.visible = p > ringsEnter && navigationVisibility > 0;
         logo.setClosedRings(p > ringsEnter ? orbitTimeAt(p) : -1);
         logo.setFlatten(seal);
         let shown = 0,
@@ -351,24 +388,46 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
             nearest = index;
           }
         }
+        if (
+          flight &&
+          flight.id !== clearedNavigation &&
+          navigationVisibility === 0 &&
+          shown === 0 &&
+          ((flight.to === 0 && cameraX < planetWorldX(0)) ||
+            (flight.to >= finale.sealed &&
+              cameraX > planetWorldX(visits.length - 1)))
+        ) {
+          clearedNavigation = flight.id;
+          host!
+            .closest("#idea")
+            ?.dispatchEvent(
+              new CustomEvent("voyage-endpoint-clear", { detail: flight.id }),
+            );
+        }
         positionAt(p, star.position);
         const parked = state.phase === "reading";
         const starScale = starScaleAt(p);
         star.scale.setScalar(starScale);
-        traveller.setFocus(lightFocus, p > ringsEnter, seal);
+        traveller.setFocus(
+          lightFocus,
+          p > ringsEnter,
+          seal,
+          navigationVisibility,
+        );
         rotationAt(p, star.rotation);
         starLight.position.copy(star.position).add(temp.set(0, 0.2, 1));
-        starLight.intensity = 0.9 + lightFocus * 0.4 + seal * 1.2;
+        starLight.intensity =
+          (0.9 + lightFocus * 0.4 + seal * 1.2) * navigationVisibility;
         glow.position.copy(star.position);
         glow.position.z -= 0.02;
         glow.scale.setScalar(starScale * 3.2);
-        glowMaterial.opacity = lightFocus * 0.38;
+        glowMaterial.opacity = lightFocus * 0.38 * navigationVisibility;
         if (parked && !previousReading) wake.clear();
         previousReading = parked;
         const pixelsPerUnit =
           height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
         const wakeLength = (narrow ? 100 : 150) / pixelsPerUnit;
-        if (p >= finale.orbit) {
+        if (p >= finale.orbit || navigationVisibility === 0) {
           wake.clear();
         } else {
           if (previousOrbit)
@@ -397,6 +456,7 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
           readingTrail *
           smoothRange(0, 0.008, p) *
           (1 - seal) *
+          navigationVisibility *
           (1 - smoothRange(finale.orbit - 0.012, finale.orbit, p));
         renderer.render(scene, camera);
         if (sealedLogoRef.current) {
@@ -412,7 +472,7 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
             top: `${y}px`,
             width: `${size}px`,
             height: `${size}px`,
-            opacity: String(seal),
+            opacity: String(seal * navigationVisibility),
             filter: `blur(${(1 - seal) * 2}px)`,
           });
         }
@@ -428,10 +488,14 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
           "--star-y",
           `${((hostOffsetY + (-projected.y * 0.5 + 0.5) * height) / stageHeight) * 100}%`,
         );
-        stage?.style.setProperty("--reading-light", String(lightFocus));
+        stage?.style.setProperty(
+          "--reading-light",
+          String(lightFocus * navigationVisibility),
+        );
         Object.assign(canvas!.dataset, {
           engine: "three.js r187",
           progress: p.toFixed(6),
+          navigationVisibility: navigationVisibility.toFixed(6),
           phase: state.phase,
           planetIndex: String(shown ? nearest : -1),
           worldStep: worldStep.toFixed(5),
@@ -461,7 +525,7 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
           ringsEnter: ringsEnterAt.toFixed(6),
           ringsReady: ringsReadyAt.toFixed(6),
         });
-        if (fallbackRef.current) fallbackRef.current.style.opacity = "0";
+        loadingState("ready");
         if (!focusSettled) requestRender();
       }
       function requestRender() {
@@ -623,15 +687,30 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
           Math.max(finale.start + 0.049, ringsEnterAt + 0.012),
         );
         measureParkPoints(rect);
+        if (stage) {
+          const halfHeight = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+          const earthX =
+            (planetWorldX(0) - viewCameraXAt(visits[0].parked)) /
+            (((narrow ? 11 : 16) + 2) * halfHeight * camera.aspect);
+          stage.style.setProperty(
+            "--first-planet-x",
+            `${hostOffsetX + (earthX * 0.5 + 0.5) * width}px`,
+          );
+          stage.style.setProperty(
+            "--first-planet-y",
+            `${hostOffsetY + height * 0.5}px`,
+          );
+        }
         renderer.setSize(width, height, false);
         requestRender();
       }
       function lost(event: Event) {
         event.preventDefault();
-        if (fallbackRef.current) fallbackRef.current.style.opacity = "1";
+        loadingState("unavailable");
         canvas!.style.opacity = "0";
       }
       function restored() {
+        loadingState("loading");
         canvas!.style.opacity = "1";
         requestRender();
       }
@@ -643,6 +722,11 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
       });
       observer.observe(host!);
       const unsubscribe = progress?.on("change", requestRender);
+      const unsubscribeNavigation = navigationOpacity?.on(
+        "change",
+        requestRender,
+      );
+      const unsubscribeFlight = navigationFlight?.on("change", requestRender);
       document.addEventListener("visibilitychange", requestRender);
       preference.addEventListener("change", requestRender);
       canvas!.addEventListener("webglcontextlost", lost);
@@ -676,6 +760,8 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
         copyObserver.disconnect();
         document.fonts.removeEventListener("loadingdone", queueMeasurement);
         unsubscribe?.();
+        unsubscribeNavigation?.();
+        unsubscribeFlight?.();
         resizeObserver.disconnect();
         observer.disconnect();
         document.removeEventListener("visibilitychange", requestRender);
@@ -694,13 +780,13 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
       };
     }
     void initialise().catch(() => {
-      if (fallbackRef.current) fallbackRef.current.style.opacity = "1";
+      loadingState("unavailable");
     });
     return () => {
       disposed = true;
       cleanup?.();
     };
-  }, [progress, compact]);
+  }, [progress, compact, navigationOpacity, navigationFlight, onStateChange]);
   return (
     <div
       ref={hostRef}
@@ -713,17 +799,6 @@ export default function StarVoyageScene({ progress, compact = false }: Props) {
         isolation: "isolate",
       }}
     >
-      <div
-        ref={fallbackRef}
-        style={{
-          position: "absolute",
-          inset: 0,
-          display: "grid",
-          placeItems: "center",
-        }}
-      >
-        <Image src="/logo.svg" alt="" width={220} height={220} />
-      </div>
       <canvas
         ref={canvasRef}
         style={{

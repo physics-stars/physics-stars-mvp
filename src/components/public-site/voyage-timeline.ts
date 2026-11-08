@@ -33,7 +33,7 @@ export const finale = {
 export const waypointStops = [
   0,
   ...visits.map((visit) => (visit.textIn + visit.textOut) / 2),
-  0.995,
+  1,
 ];
 
 export function orbitAmount(progress: number) {

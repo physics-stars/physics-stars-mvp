@@ -21,6 +21,19 @@ export default async function LandingPage({ searchParams }: Props) {
   const locale = await getPublicLocale(searchParams);
   return (
     <Suspense>
+      <script
+        id="landing-reload-position"
+        dangerouslySetInnerHTML={{
+          __html: `history.scrollRestoration = 'manual';
+if (performance.getEntriesByType('navigation')[0]?.type === 'reload') {
+  if (location.hash) history.replaceState(history.state, '', location.pathname + location.search);
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  window.addEventListener('pageshow', () => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, { once: true });
+}`,
+        }}
+      />
       <PublicShell locale={locale}>
         <Landing />
       </PublicShell>
