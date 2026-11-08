@@ -585,6 +585,103 @@
   }
 }
 
+/* The scene and the copy share this mode, including portrait tablets. These
+ * rules leave the existing desktop composition and flight geometry intact. */
+.stage[data-voyage-narrow="false"] .cosmos {
+  inset: 0;
+}
+.stage[data-voyage-narrow="false"] .frame {
+  top: 48%;
+  translate: 0 -50%;
+}
+.stage[data-voyage-narrow="false"] .heroFrame {
+  top: 47%;
+}
+@media (max-width: 760px) {
+  .stage[data-voyage-narrow="false"] .frame {
+    left: 6.5vw;
+    width: 42%;
+  }
+  .stage[data-voyage-narrow="false"] .reverseFrame {
+    left: 53%;
+    width: 40%;
+  }
+}
+.stage[data-voyage-narrow="true"] .cosmos {
+  top: 0;
+  bottom: auto;
+  height: var(--voyage-scene-height, 48%);
+}
+.stage[data-voyage-narrow="true"] .frame {
+  top: var(--voyage-copy-top, 50%);
+  translate: none;
+  left: max(24px, env(safe-area-inset-left));
+  width: calc(100% - 48px);
+  max-width: 680px;
+}
+.stage[data-voyage-narrow="true"] .frame h1 {
+  font-size: clamp(34px, 7vw, 52px);
+}
+.stage[data-voyage-narrow="true"] .frame h2 {
+  font-size: clamp(32px, 6.5vw, 48px);
+}
+.stage[data-voyage-narrow="true"] .description {
+  max-width: 550px;
+  font-size: clamp(12px, 1.9vw, 15px);
+  line-height: 1.75;
+  margin-top: 18px !important;
+}
+.stage[data-voyage-narrow="true"] .finale {
+  top: var(--voyage-final-top, 44%);
+}
+.stage[data-voyage-narrow="true"] .finale h2 {
+  font-size: clamp(32px, 7.4vw, 55px);
+}
+.stage[data-voyage-short="true"] .frame h1 {
+  font-size: clamp(26px, 6.7svh, 44px);
+}
+.stage[data-voyage-short="true"] .frame h2 {
+  font-size: clamp(26px, 6.4svh, 42px);
+}
+.stage[data-voyage-short="true"] .description {
+  font-size: 12px;
+  line-height: 1.65;
+  margin-top: 14px !important;
+}
+.stage[data-voyage-short="true"] .bottomControls {
+  bottom: max(8px, env(safe-area-inset-bottom));
+}
+.stage[data-voyage-short="true"] .wordmark {
+  font-size: 28px;
+  margin-bottom: 12px !important;
+}
+.stage[data-voyage-short="true"] .finale h2 {
+  font-size: clamp(26px, 7svh, 42px);
+}
+.stage[data-voyage-short="true"] .finale > p:not(.wordmark) {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 12px !important;
+}
+.stage[data-voyage-short="true"] .continueHint {
+  margin-top: 8px;
+  min-height: 32px;
+}
+.stage[data-voyage-short="true"][data-voyage-narrow="false"] .finale {
+  top: calc(50% - 22px);
+  left: 53%;
+  margin-left: 0;
+  width: 41%;
+  translate: 0 -50%;
+  text-align: left;
+}
+.stage[data-voyage-short="true"][data-voyage-narrow="false"] .finale > p {
+  margin-left: 0 !important;
+}
+.stage[data-voyage-short="true"][data-voyage-narrow="true"] :is(.frame h1, .frame h2, .finale h2) {
+  font-size: clamp(26px, 5.8svh, 32px);
+}
+
 .sceneLoader {
   position: absolute;
   inset: 0;

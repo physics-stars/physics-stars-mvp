@@ -57,154 +57,79 @@ export function glassRoute(
   header: number,
   reverse = false,
   receives = true,
+  pageDistance = height - header,
 ) {
-  // Fit one broad Bézier instead of pulling a spline through small local
-  // waypoints. Control handles may lie outside the viewport; the curve may not.
-  const space = Math.max(60, body.x - 12),
-    gap = body.y - neck.y;
-  let best: LightPath | null = null,
-    bestScore = Infinity;
-  for (const a of [1.2, 1.7, 2.2])
-    for (const b of [gap * 2.45, gap * 3.3, space * 1.38])
-      for (const c of [12 - space * 0.6, 12 - space * 0.3, 20])
-        for (const d of [1.05, 1.75, 2.45])
-          for (const e of [60, 100, 140]) {
-            const candidate = quintic(
-              body,
-              { x: body.x, y: body.y - gap * a },
-              { x: body.x, y: body.y - b },
-              { x: c, y: neck.y - gap * d },
-              { x: end.x - e, y: end.y },
-              end,
-            );
-            const p = Array.from({ length: 81 }, (_, i) => candidate(i / 80));
-            let valid = true,
-              mouth = false,
-              previousCurvature = 0,
-              variation = 0,
-              peak = 0;
-            for (let i = 1; i < p.length; i++) {
-              const q = p[i],
-                prev = p[i - 1];
-              if (
-                q.x < 12 ||
-                q.x > width - 12 ||
-                q.y < header + 28 ||
-                q.y < neck.y - 40 ||
-                q.y > height - 22
-              ) {
-                valid = false;
-                break;
-              }
-              if (
-                !mouth &&
-                q.y >= neck.y &&
-                Math.abs(q.x - body.x) >
-                  6.5 + Math.max(0, q.y - neck.y - 21) * 0.65
-              ) {
-                valid = false;
-                break;
-              }
-              if (!mouth && q.y <= neck.y) {
-                const fraction = (neck.y - prev.y) / (q.y - prev.y),
-                  x = mix(prev.x, q.x, fraction);
-                if (Math.abs(x - neck.x) > 7) {
-                  valid = false;
-                  break;
-                }
-                mouth = true;
-              }
-              if (i > 1) {
-                const before = p[i - 2],
-                  ux = prev.x - before.x,
-                  uy = prev.y - before.y,
-                  vx = q.x - prev.x,
-                  vy = q.y - prev.y;
-                const k =
-                  Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy) /
-                  ((Math.hypot(ux, uy) + Math.hypot(vx, vy)) / 2 || 1);
-                variation += Math.abs(k - previousCurvature);
-                peak = Math.max(peak, Math.abs(k));
-                previousCurvature = k;
-              }
-            }
-            const score = variation + 2 * peak;
-            if (valid && mouth && score < bestScore) {
-              best = candidate;
-              bestScore = score;
-            }
-          }
-  const base = byDistance(
-    best ??
-      quintic(
-        body,
-        { x: body.x, y: neck.y - 40 },
-        { x: body.x, y: neck.y - 40 },
-        { x: 12, y: neck.y - 40 },
-        { x: Math.max(12, end.x - 65), y: end.y },
-        end,
-      ),
-  );
-  let mouthAt = 0;
-  for (let i = 1; i <= 1024; i++) {
-    if (base(i / 1024).y > neck.y) continue;
-    let lo = (i - 1) / 1024, hi = i / 1024;
-    for (let step = 0; step < 30; step++) {
-      const mid = (lo + hi) / 2;
-      if (base(mid).y > neck.y) lo = mid;
-      else hi = mid;
+  const target = { x: end.x, y: end.y + pageDistance };
+  const space = Math.max(20, neck.x - 16);
+  const lane = Math.max(18, Math.min(neck.x - Math.min(140, space * 0.95), target.x - 40));
+  const radius = (neck.x - lane) / 2;
+  const rise = Math.min(radius, (neck.y - header - 30) * 0.35);
+  const entryHandle = Math.max(0, Math.min(40, (target.x - lane) * 0.8));
+  // One C2 spline owns the entire external gesture. Scroll phases only sample
+  // it; there are no separate arch/lead/wave curves to flatten at their joins.
+  const controls = [
+    neck,
+    { x: neck.x, y: neck.y - rise * 0.3 },
+    { x: neck.x - radius * 0.15, y: neck.y - rise * 0.65 },
+    { x: neck.x - radius * 0.6, y: neck.y - rise * 1.1 },
+    { x: neck.x - radius * 1.4, y: neck.y - rise * 1.1 },
+    { x: lane + radius * 0.15, y: neck.y - rise * 0.65 },
+    { x: lane, y: neck.y - rise * 0.1 },
+    { x: lane, y: neck.y + rise * 0.7 },
+    { x: lane, y: neck.y + rise * 2.2 },
+    { x: lane, y: target.y - 240 },
+    { x: receives ? lane : target.x, y: target.y - 120 },
+    ...(receives ? [
+      { x: lane, y: target.y - 60 },
+      { x: target.x - entryHandle, y: target.y },
+      { x: target.x - entryHandle / 2, y: target.y },
+    ] : [
+      { x: target.x, y: target.y - 80 },
+      { x: target.x, y: target.y - 40 },
+    ]),
+    target,
+  ];
+  const base = spline(controls);
+  const clearance = Math.min(space * 0.55, (body.y - neck.y) * 0.8);
+  function turnAt(path: LightPath) {
+    for (let i = 1; i < 500; i++) {
+      const t = i / 1000, p = path(t);
+      const before = path(t - 0.0001), after = path(t + 0.0001);
+      if (p.x < neck.x - clearance && after.y - before.y > Math.abs(after.x - before.x) * 1.4)
+        return t;
     }
-    mouthAt = hi;
-    break;
+    return 0.15;
   }
-  const blendSpan = Math.min(0.16, 18 / pathLength(base));
-  const centered = byDistance((t) => {
+  const released = turnAt(base);
+  const completed = receives ? 1 - Math.min(0.2, 60 / pathLength(base)) : 1;
+  const waveAt = (t: number) => {
+    const u = clamp((t - released) / (completed - released));
+    return Math.sin(2 * Math.PI * u) * Math.sin(Math.PI * u) ** 2;
+  };
+  let amplitude = width <= 760 ? 24 : 32;
+  for (let i = 1; i < 512; i++) {
+    const t = i / 512, p = base(t), wave = waveAt(t);
+    if (wave < 0) amplitude = Math.min(amplitude, (p.x - 12) / -wave);
+    if (wave > 0) amplitude = Math.min(amplitude, (width - 12 - p.x) / wave);
+  }
+  const path = byDistance(t => {
     const p = base(t);
-    const blend = smoothPosition(clamp((t - mouthAt) / blendSpan));
-    return { x: neck.x + (p.x - neck.x) * blend, y: p.y };
+    return { x: p.x + Math.max(0, amplitude) * waveAt(t), y: p.y };
   });
-  let released = 0;
-  for (let i = 1; i < 200; i++) {
-    const t = i / 400;
-    if (centered(t).y < neck.y - 2) {
-      released = t;
-      break;
-    }
-  }
-  const path = oneWave(
-    centered,
-    width,
-    height,
-    header,
-    Math.max(header + 28, neck.y - 40),
-    released,
-  );
-  const length = pathLength(path);
-  // Complete the arch before the page moves: the light must be well left of
-  // the mouth and already turning downward, rather than just clearing it.
-  const arrival = receives ? 1 - Math.min(0.2, 50 / length) : 1;
-  const clearance = Math.min(space * 0.55, gap * 0.8);
-  let departure = released;
-  let downward = -Infinity;
-  for (let i = 1; i < Math.floor(arrival * 400); i++) {
-    const q = i / 400,
-      a = path(q),
-      before = path(q - 0.001),
-      after = path(q + 0.001);
-    if (a.x > body.x - clearance) continue;
-    const dx = after.x - before.x,
-      dy = after.y - before.y,
-      headingDown = dy / (Math.hypot(dx, dy) || 1);
-    if (headingDown > downward) {
-      downward = headingDown;
-      departure = q;
-    }
-    if (dy > Math.abs(dx) * 1.4) {
-      departure = q;
-      break;
-    }
-  }
-  return splitRoute(path, departure, arrival, reverse);
+  const departure = turnAt(path);
+  const arrival = receives ? 1 - Math.min(0.2, 50 / pathLength(path)) : 1;
+  const pieces = splitRoute(path, departure, arrival);
+  const stem = Math.max(0, body.y - neck.y);
+  const mouth = stem / (stem + pathLength(path) * departure);
+  const launch = (t: number) => t < mouth
+    ? { x: neck.x, y: mix(body.y, neck.y, t / mouth) }
+    : pieces.departure((t - mouth) / (1 - mouth));
+  return reverse ? {
+    departure: (t: number) => pieces.entry(1 - t),
+    flight: (t: number) => pieces.flight(1 - t),
+    entry: (t: number) => launch(1 - t),
+    trailStart: mouth,
+  } : { ...pieces, departure: launch, trailStart: mouth };
 }
 
 export function rightRoute(
@@ -224,11 +149,11 @@ export function rightRoute(
   const outer = Math.max(team.x, pilot.x);
   const room = Math.max(4, width - 12 - outer);
   const lane = outer + room * 0.58;
-  const drop = Math.max(3, Math.min(36, (height - 12 - team.y) * 0.7, gap * 0.15));
+  const drop = Math.max(24, Math.min(70, room * 0.8, gap * 0.2));
   const rise = receives ? Math.min(64, gap * 0.2) : 0;
   const leaving = { x: lane, y: team.y + drop };
   const entering = { x: receives ? lane : end.x, y: end.y - rise };
-  const departure = byDistance(quintic(
+  const launch = byDistance(quintic(
     team,
     { x: mix(team.x, lane, 1 / 3), y: team.y },
     { x: mix(team.x, lane, 2 / 3), y: team.y },
@@ -236,12 +161,27 @@ export function rightRoute(
     { x: lane, y: mix(team.y, leaving.y, 2 / 3) },
     leaving,
   ));
+  // Continue the same broad turn as the page starts moving. Squeezing the
+  // whole turn into the few pixels below the bar produced a sharp elbow.
+  let low = 0, high = 1;
+  for (let i = 0; i < 28; i++) {
+    const mid = (low + high) / 2;
+    if (launch(mid).y <= height - 12) low = mid;
+    else high = mid;
+  }
+  const split = Math.max(0.05, low);
+  const departure = (t: number) => launch(t * split);
   const amplitude = Math.min(24, room * 0.25);
-  const flight = byDistance((t) => ({
+  const wave = byDistance((t) => ({
     x: mix(leaving.x, entering.x, smoothPosition(t)) +
       amplitude * Math.sin(2 * Math.PI * t) * Math.sin(Math.PI * t) ** 2,
     y: mix(leaving.y, entering.y, t),
   }));
+  const bendLength = pathLength(launch) * (1 - split);
+  const bend = bendLength / (bendLength + pathLength(wave));
+  const flight = (t: number) => t < bend
+    ? launch(mix(split, 1, t / bend))
+    : wave((t - bend) / (1 - bend));
   const entry = receives ? byDistance(quintic(
     entering,
     { x: entering.x, y: mix(entering.y, end.y, 1 / 3) },

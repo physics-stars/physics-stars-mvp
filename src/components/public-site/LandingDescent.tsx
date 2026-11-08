@@ -31,12 +31,13 @@ import {
   type ScrollBridge,
 } from "./descent-scroll";
 import { CurveTrail, type TrailCursor } from "./curve-trail";
+import { ScrollGesture } from "./scroll-gesture";
 
 type Index = 0 | 1 | 2;
 type BarIndex = 1 | 2;
 const subscribeClient = () => () => {};
-/** Scroll controls the light and the section magnet. Only a visible bar's
- * charge/discharge briefly owns the scroll; offscreen destinations wait. */
+/** Scroll controls the light and the section magnet. Visible bar effects and
+ * the flask's reading flash briefly own the scroll; offscreen targets wait. */
 export function LandingDescent({ children }: { children: ReactNode }) {
   const clientReady = useSyncExternalStore(
     subscribeClient,
@@ -46,13 +47,14 @@ export function LandingDescent({ children }: { children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null),
     scene = useRef<SVGSVGElement>(null);
   const star = useRef<SVGGElement>(null),
+    aura = useRef<SVGCircleElement>(null),
+    flashAura = useRef<SVGCircleElement>(null),
     trail = useRef<SVGPathElement>(null),
     gradient = useRef<SVGLinearGradientElement>(null);
-  const panelMask = useRef<SVGGElement>(null);
   const vesselTrailMask = useRef<SVGPathElement>(null);
   const haloId = useId(),
+    coreId = useId(),
     trailId = useId(),
-    maskId = useId(),
     trailMaskId = useId();
   useEffect(() => {
     if (!clientReady || !root.current || !scene.current) return;
@@ -71,17 +73,6 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     const members = Array.from(
       container.querySelectorAll<HTMLElement>("[data-descent-member]"),
     );
-    const occluders = members
-      .flatMap((el) => [
-        el.querySelector<HTMLElement>("[data-descent-photo]"),
-        el.querySelector<HTMLElement>("h3"),
-        el.querySelector<HTMLElement>("span"),
-      ])
-      .filter((el): el is HTMLElement => !!el);
-    const masks = occluders.map(() =>
-      document.createElementNS("http://www.w3.org/2000/svg", "rect"),
-    );
-    panelMask.current!.replaceChildren(...masks);
     const voyage = document.getElementById("idea");
     if (sections.length !== 3 || !vessel || bars.length !== 2) return;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
@@ -94,7 +85,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     let point: LightPoint = { x: 0, y: 0 },
       alpha = 0;
     let touchY: number | null = null;
+    let freshInput = false;
     const curveTrail = new CurveTrail();
+    const gesture = new ScrollGesture();
     let trailCursor: TrailCursor | null = null;
     const approaches = new Map<string, { start: number; end: number; at: LightPath }>();
     const powers = [0, 0, 0];
@@ -110,6 +103,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       flight: LightPath;
       arrival: LightPath;
       pageCoordinates: boolean;
+      trailStart: number;
     };
     const routes = new Map<number, Omit<Bridge, "offset">>();
     let active: Bridge | null = null;
@@ -120,6 +114,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       to: number;
       started: number;
       bridge: Bridge;
+      duration: number;
     } | null = null;
     let barMotion: {
       index: BarIndex;
@@ -129,6 +124,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       top: number;
       side: LightSide;
     } | null = null;
+    let flaskReady = false;
+    let flaskFlash: { started: number; top: number } | null = null;
+    let flashStrength = 0;
     function geometry() {
       const w = innerWidth,
         h = innerHeight,
@@ -157,7 +155,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
               y: r.top + r.height / 2 + shift,
             };
       const neck = { x: p.x, y: r.top + (r.height * 43) / 290 + shift };
-      const visible = p.y >= header + 18 && p.y <= h - 22;
+      const visible = p.y >= header + 18 && p.y <= h - (index === 0 ? 22 : 2);
       return { p, neck, visible };
     }
     function paintPower(
@@ -207,11 +205,11 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         const target = port(to, side, end);
         const a = source?.visible ? source.p : waiting;
         const b = target.visible ? target.p : waiting;
-        let parts;
+        let parts: { departure: LightPath; flight: LightPath; entry: LightPath; trailStart?: number };
         if (to === 0)
           parts = { departure: () => target.p, flight: () => target.p, entry: () => target.p };
         else if (to === 1 && source?.visible)
-          parts = glassRoute(source.p, source.neck, b, g.w, g.h, g.header, false, target.visible);
+          parts = glassRoute(source.p, source.neck, b, g.w, g.h, g.header, false, target.visible, end - start);
         else if (to === 2)
           parts = rightRoute(a, b, g.w, g.h, g.header, false, target.visible, end - start);
         else {
@@ -232,7 +230,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
           departure: parts.departure,
           flight: parts.flight,
           arrival: parts.entry,
-          pageCoordinates: to === 2,
+          pageCoordinates: to === 2 || (to === 1 && !!source?.visible),
+          trailStart: (parts.trailStart ?? 0) * (source?.visible ? 140 : 0),
         };
         routes.set(index, route);
       }
@@ -261,11 +260,11 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       const state = bridgeFrame(current, current.offset);
       point = bridgePoint(current, current.offset);
       const length = bridgeLength(current);
-      trailCursor = {
+      trailCursor = current.offset < current.trailStart ? null : {
         key: `bridge:${current.index}`,
         value: current.offset,
-        origin: current.origin === 1 ? length : 0,
-        min: 0,
+        origin: current.origin === 1 ? length : current.trailStart,
+        min: current.trailStart,
         max: length,
         at: (offset) => bridgePoint(current, offset),
       };
@@ -298,7 +297,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       if (!approach) {
         const endPoint = { x: target.p.x, y: target.p.y + scrollY };
         const start = endPoint.y - g.h - 100;
-        const end = start + 122;
+        // Finish when the bar itself is visible, without reserving an extra
+        // halo-sized strip that can leave a slightly taller mobile slide stuck.
+        const end = start + 102;
         const startPoint = { x: waiting.x, y: start + waiting.y };
         const sign = side === "left" ? -1 : 1;
         const handle = Math.min(40, Math.abs(waiting.x - endPoint.x) * 0.65);
@@ -385,12 +386,51 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       }
       schedule();
     }
+    function beginFlaskFlash() {
+      if (!animated || flaskReady || flaskFlash || barMotion || !port(0, "left").visible)
+        return false;
+      stopMagnet();
+      active = null;
+      flaskReady = true;
+      flaskFlash = { started: performance.now(), top: geometry().ends[0] };
+      window.scrollTo({ top: flaskFlash.top, behavior: "instant" });
+      container.dataset.motionBusy = "true";
+      container.dataset.flaskFlash = "true";
+      schedule();
+      return true;
+    }
+    function animateFlaskFlash(time: number) {
+      const motion = flaskFlash;
+      if (!motion) return;
+      const q = clamp((time - motion.started) / 900);
+      const target = port(0, "left");
+      if (!animated || !target.visible || q >= 1) {
+        flaskFlash = null;
+        flashStrength = 0;
+        container.dataset.motionBusy = "false";
+        delete container.dataset.flaskFlash;
+        queueSettle();
+        schedule();
+        return;
+      }
+      point = target.p;
+      alpha = 1;
+      docked = true;
+      trailCursor = null;
+      flashStrength = Math.sin(Math.PI * q) ** 2;
+      paintPower(0, 1, "left");
+      container.dataset.lightPhase = "flash";
+      if (Math.abs(scrollY - motion.top) > 0.5)
+        window.scrollTo({ top: motion.top, behavior: "instant" });
+      schedule();
+    }
     function render(time: number) {
       frame = 0;
       trailCursor = null;
       const g = geometry(),
         rootBounds = container.getBoundingClientRect();
       const team = panel.getBoundingClientRect();
+      if (!flaskFlash && scrollY < g.ends[0] - 48) flaskReady = false;
       container.style.setProperty("--team-top", `${g.bounds[1].top - rootBounds.top}px`);
       container.style.setProperty("--team-height", `${g.bounds[1].height}px`);
       panel.style.setProperty("--panel-light-y", `${team.height}px`);
@@ -412,6 +452,12 @@ export function LandingDescent({ children }: { children: ReactNode }) {
           readingLight(owner);
         }
       }
+      if (animated && !active && !barMotion && Math.abs(scrollY - g.ends[0]) < 1.5)
+        beginFlaskFlash();
+      if (flaskFlash) {
+        owner = 0;
+        animateFlaskFlash(time);
+      }
       if (barMotion) {
         owner = barMotion.index;
         animateBar(time);
@@ -422,15 +468,6 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       svg.style.width = `${g.w}px`;
       svg.style.height = `${g.h}px`;
       svg.style.clipPath = `inset(${Math.max(g.header, rootBounds.top)}px 0 ${Math.max(0, g.h - rootBounds.bottom)}px 0)`;
-      // The portal is a genuinely fixed layer outside the scrolling site. This
-      // mask keeps the photographic panel visually in front of the light.
-      masks.forEach((mask, i) => {
-        const r = occluders[i].getBoundingClientRect();
-        mask.setAttribute("x", String(r.left));
-        mask.setAttribute("y", String(r.top));
-        mask.setAttribute("width", String(r.width));
-        mask.setAttribute("height", String(r.height));
-      });
       const flask = vessel.getBoundingClientRect();
       vesselTrailMask.current!.setAttribute(
         "transform",
@@ -440,6 +477,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         "transform",
         `translate(${point.x} ${point.y})`,
       );
+      star.current!.style.filter = "";
+      aura.current!.style.opacity = String(0.65 + flashStrength * 0.35);
+      flashAura.current!.style.opacity = String(flashStrength * 0.8);
       star.current!.style.opacity = String(shown);
       const trace = curveTrail.update(shown > 0.05 && !docked ? trailCursor : null, time);
       trail.current!.setAttribute("d", trace.d);
@@ -450,7 +490,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         gradient.current!.setAttribute("x2", String(end.x));
         gradient.current!.setAttribute("y2", String(end.y));
       }
-      trail.current!.style.opacity = String((inRoot ? 0.64 : 0) * trace.opacity);
+      trail.current!.style.opacity = String((inRoot ? 0.86 : 0) * trace.opacity);
       container.dataset.lightX = point.x.toFixed(2);
       container.dataset.lightY = point.y.toFixed(2);
       container.dataset.lightOwner = String(owner);
@@ -475,6 +515,12 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     function finishBridge(current: Bridge, end: boolean) {
       const owner = end ? current.index : current.index - 1;
       active = null;
+      if (current.index === 0 && !end)
+        window.dispatchEvent(new Event("landing-logo-return"));
+      if (owner === 0) {
+        flaskReady = false;
+        if (current.index === 1 && !end) beginFlaskFlash();
+      }
       if (owner > 0) {
         const state = barStates[owner - 1];
         state.departure = 0;
@@ -487,10 +533,12 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       magnetFrame = 0;
       const current = magnet;
       if (!current) return;
-      const q = clamp((time - current.started) / 300);
+      const q = clamp((time - current.started) / current.duration);
       applyOffset(current.bridge, mix(current.from, current.to, ease(q)));
-      if (q < 1) magnetFrame = requestAnimationFrame(attract);
+      if (q < 1 && Math.abs(current.bridge.offset - current.to) > 0.5)
+        magnetFrame = requestAnimationFrame(attract);
       else {
+        applyOffset(current.bridge, current.to);
         magnet = null;
         delete container.dataset.magnetTarget;
         finishBridge(current.bridge, current.to > 0);
@@ -499,7 +547,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     function settle() {
       clearTimeout(settleTimer);
       if (
-        magnet || touching || barMotion || media.matches ||
+        magnet || touching || barMotion || flaskFlash || media.matches ||
         voyage?.dataset.voyageCue || voyage?.dataset.voyageNavigation ||
         voyage?.dataset.landingJump
       ) return;
@@ -507,7 +555,20 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       if (!active) {
         const g = geometry();
         const transition = sectionTransition(scrollY, pageSections(), g.h, g.header);
-        if (!transition) return;
+        if (!transition) {
+          // A discharge can outlast the gesture that started it. If the light
+          // is still at its visible bar, let it re-enter without another event.
+          barStates.forEach((state, i) => {
+            const index = (i + 1) as BarIndex;
+            const target = port(index, state.side);
+            if (state.departure && state.power === 0 && target.visible &&
+                Math.hypot(point.x - target.p.x, point.y - target.p.y) < 18) {
+              state.departure = 0;
+              beginBar(index, 1);
+            }
+          });
+          return;
+        }
         active = bridge(transition.index);
         active.offset = active.exit + scrollY - active.start;
       }
@@ -516,7 +577,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         finishBridge(active, to > 0);
         return;
       }
-      magnet = { from: active.offset, to, started: performance.now(), bridge: active };
+      magnet = { from: active.offset, to, started: performance.now(), bridge: active,
+        duration: Math.abs(to - active.offset) < 36 ? 270 : 360 };
       container.dataset.magnetTarget = String(to ? active.end : active.start);
       magnetFrame = requestAnimationFrame(attract);
     }
@@ -551,22 +613,38 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       const overflow = delta - (current.offset - before);
       if (current.offset <= 0 || current.offset >= bridgeLength(current)) {
         finishBridge(current, current.offset > 0);
-        if (!barMotion && Math.abs(overflow) > 0.01)
+        if (!(current.index === 0 && current.offset === 0) &&
+            !barMotion && !flaskFlash && Math.abs(overflow) > 0.01)
           window.scrollTo({ top: scrollY + overflow, behavior: "instant" });
       }
       queueSettle();
+      if (active && gesture.settling(performance.now())) {
+        const to = bridgeStop(active, active.offset, scrollY);
+        if (Math.abs(to - active.offset) < 28 && Math.sign(to - active.offset) === Math.sign(delta))
+          settle();
+      }
     }
     function consume(delta: number, event: Event) {
       if (!delta) return;
+      const deliberate = gesture.read(delta, performance.now(),
+        freshInput || (event instanceof KeyboardEvent && !event.repeat) ? true : undefined);
+      freshInput = false;
       // The intro owns its one-off hint nudge and lets a fresh gesture cancel
       // it before native scrolling. Its return uses this same section magnet.
       if (voyage?.dataset.voyageCue) return;
+      if (magnet && !deliberate && Math.abs(delta) <= 3 &&
+          Math.sign(delta) === Math.sign(magnet.to - magnet.bridge.offset)) {
+        discard(event);
+        return;
+      }
       stopMagnet();
-      if (barMotion) {
+      if (barMotion || flaskFlash) {
         discard(event);
         return;
       }
       if (!animated) return;
+      // Always leave an idle check, including input that cannot move the page.
+      queueSettle();
       const direction = Math.sign(delta);
       barStates.forEach((state) => {
         if (state.departure && state.departure !== direction) state.departure = 0;
@@ -578,8 +656,17 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       }
       const g = geometry();
       const owner = g.starts.findLastIndex((start) => scrollY >= start - 1);
+      if (owner === 0 && flaskReady && !deliberate && scrollY >= g.ends[0] - 1) {
+        discard(event);
+        return;
+      }
       if (owner > 0) {
         const state = barStates[owner - 1];
+        if (!deliberate && Math.abs(delta) <= 3 && state.power === 1 &&
+            port(owner as BarIndex, state.side).visible) {
+          discard(event);
+          return;
+        }
         if (state.power > 0 && !state.departure &&
             (delta < 0 || (owner < sections.length - 1 && scrollY + delta > g.ends[owner])))
           beginBar(owner as BarIndex, 0, direction);
@@ -590,6 +677,13 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       }
       const transition = sectionTransition(scrollY, pageSections(), g.h, g.header);
       if (transition) {
+        if (transition.index === 1 && delta > 0 && !flaskReady) {
+          window.scrollTo({ top: g.ends[0], behavior: "instant" });
+          if (beginFlaskFlash()) {
+            discard(event);
+            return;
+          }
+        }
         active = bridge(transition.index, direction > 0 ? 0 : 1);
         active.offset = active.exit + scrollY - active.start;
         discard(event);
@@ -607,6 +701,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       discard(event);
       const remaining = delta - (edge - scrollY);
       window.scrollTo({ top: edge, behavior: "instant" });
+      if (owner === 0 && direction > 0 && beginFlaskFlash()) return;
       if (owner > 0 && barStates[owner - 1].power > 0 && !barStates[owner - 1].departure) {
         beginBar(owner as BarIndex, 0, direction);
         if (barMotion) return;
@@ -630,6 +725,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       consume(direction * (["ArrowDown", "ArrowUp"].includes(event.key) ? 70 : innerHeight * 0.8), event);
     }
     function pointerDown() {
+      freshInput = true;
       touching = true;
       stopMagnet();
     }
@@ -651,6 +747,13 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     function navigate() {
       stopMagnet();
       active = null;
+      if (flaskFlash) {
+        flaskFlash = null;
+        flashStrength = 0;
+        container.dataset.motionBusy = "false";
+        delete container.dataset.flaskFlash;
+      }
+      flaskReady = false;
       curveTrail.reset();
       schedule();
     }
@@ -690,6 +793,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       container.dataset.motionBusy = "false";
       delete container.dataset.barAnimation;
       resize.disconnect();
+      delete container.dataset.flaskFlash;
       mode.disconnect();
       media.removeEventListener("change", preference);
       window.removeEventListener("scroll", scroll);
@@ -719,17 +823,6 @@ export function LandingDescent({ children }: { children: ReactNode }) {
           >
             <defs>
               <mask
-                id={maskId}
-                maskUnits="userSpaceOnUse"
-                x="0"
-                y="0"
-                width="100%"
-                height="100%"
-              >
-                <rect width="100%" height="100%" fill="white" />
-                <g ref={panelMask} fill="black" />
-              </mask>
-              <mask
                 id={trailMaskId}
                 maskUnits="userSpaceOnUse"
                 x="0"
@@ -741,20 +834,28 @@ export function LandingDescent({ children }: { children: ReactNode }) {
                 <path ref={vesselTrailMask} d={vesselBodyPath} fill="black" />
               </mask>
               <radialGradient id={haloId}>
-                <stop stopColor="#fdd835" stopOpacity=".48" />
-                <stop offset=".25" stopColor="#fdd835" stopOpacity=".16" />
-                <stop offset="1" stopColor="#fdd835" stopOpacity="0" />
+                <stop stopColor="#efc852" stopOpacity=".52" />
+                <stop offset=".2" stopColor="#efc852" stopOpacity=".28" />
+                <stop offset=".5" stopColor="#efc852" stopOpacity=".06" />
+                <stop offset="1" stopColor="#efc852" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id={coreId}>
+                <stop stopColor="#ffe6a6" />
+                <stop offset=".5" stopColor="#f8d786" />
+                <stop offset="1" stopColor="#efc465" />
               </radialGradient>
               <linearGradient
                 ref={gradient}
                 id={trailId}
                 gradientUnits="userSpaceOnUse"
               >
-                <stop stopColor="#b79ae4" stopOpacity="0" />
-                <stop offset="1" stopColor="#d9b833" stopOpacity=".8" />
+                <stop stopColor="#e8c16a" stopOpacity="0" />
+                <stop offset=".35" stopColor="#e8c16a" stopOpacity=".16" />
+                <stop offset=".75" stopColor="#efcd7f" stopOpacity=".7" />
+                <stop offset="1" stopColor="#f4d07b" stopOpacity="1" />
               </linearGradient>
             </defs>
-            <g mask={`url(#${maskId})`}>
+            <g>
               <path
                 ref={trail}
                 className={styles.sequenceTrail}
@@ -763,9 +864,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
                 fill="none"
               />
               <g ref={star} className={styles.sequenceStar} data-sequence-star>
-                <circle r="22" fill={`url(#${haloId})`} />
-                <circle r="3" fill="#edcb3e" />
-                <circle r="1.1" fill="#fff9df" />
+                <circle ref={flashAura} r="50" fill={`url(#${haloId})`} opacity="0" />
+                <circle ref={aura} r="32" fill={`url(#${haloId})`} />
+                <circle r="3.8" fill={`url(#${coreId})`} />
               </g>
             </g>
           </svg>,

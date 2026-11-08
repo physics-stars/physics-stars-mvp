@@ -656,6 +656,11 @@
     padding-inline: 9%;
   }
 }
+@media (max-width: 960px) {
+  .navigation {
+    display: none;
+  }
+}
 @media (max-width: 760px) {
   .overview {
     min-height: calc(100svh - 68px);

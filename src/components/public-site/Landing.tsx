@@ -142,9 +142,6 @@ export function Landing() {
                   <i />
                 </span>
               </a>
-              <a className={styles.emailLink} href={contact}>
-                {contactEmail}
-              </a>
             </div>
           </div>
           <footer className={styles.footer}>

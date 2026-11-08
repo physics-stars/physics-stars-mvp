@@ -7,6 +7,7 @@ import type { MotionValue } from "framer-motion";
 import type * as ThreeTypes from "three";
 import type { VoyageNavigationFlight } from "./voyage-progress";
 import type { VoyageSceneState } from "./VoyageLoader";
+import { voyageComposition } from "./voyage-layout";
 import {
   clamp01,
   finale,
@@ -162,8 +163,11 @@ export default function StarVoyageScene({
       trail.frustumCulled = false;
       scene.add(trail);
       let narrow = false,
+        short = false,
+        planetScale = 1.7,
         width = 1,
         height = 1,
+        drawHeight = 1,
         visible = true,
         frame = 0,
         renderedFrames = 0;
@@ -179,7 +183,13 @@ export default function StarVoyageScene({
       const orbitTangent = new THREE.Vector3();
       function logoTransform(p: number) {
         void p;
-        return { scale: narrow ? 0.8 : 0.65, y: narrow ? 0.45 : 2.1 };
+        return {
+          scale: narrow ? 0.8 : short ? 0.9 : 0.65,
+          x: !narrow && short
+            ? -Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 16 * camera.aspect * 0.52
+            : 0,
+          y: narrow ? 0.45 : short ? 0.4 : 2.1,
+        };
       }
       function orbitTimeAt(p: number) {
         const t = clamp01((p - finale.orbit) / (finale.settled - finale.orbit));
@@ -190,7 +200,7 @@ export default function StarVoyageScene({
         logo.yellowOrbit.getPointAt(clamp01(t), out);
         out
           .multiplyScalar(transform.scale)
-          .add(finalCenter.set(finalWorldX(), transform.y, 0));
+          .add(finalCenter.set(finalWorldX() + transform.x, transform.y, 0));
         return out;
       }
       let motion: ReturnType<typeof createVoyageMotion> | undefined;
@@ -215,6 +225,11 @@ export default function StarVoyageScene({
             worldStep,
             parkPoints,
             initialPoint,
+            narrow ? {
+              halfWidth: Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect,
+              halfHeight: Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)),
+              planetScale,
+            } : undefined,
           );
         }
         return motion;
@@ -233,8 +248,13 @@ export default function StarVoyageScene({
         pitchRotation = new THREE.Quaternion(),
         forwardAxis = new THREE.Vector3(0, 0, 1);
       function starScaleAt(p: number) {
-        void p;
-        return narrow ? 0.46 : 0.47;
+        // Depth still controls occlusion, without doubling the apparent size
+        // of the mobile light as it crosses the planet.
+        const compensation = 1 - smoothRange(finale.start, finale.orbit, p);
+        const readingScale = 0.46 * Math.min(2.2, Math.max(0.75, 360 / height));
+        return narrow
+          ? THREE.MathUtils.lerp(0.46, readingScale * (11 - star.position.z) / (11 - 3.2), compensation)
+          : 0.47;
       }
       function orbitRotationAt(p: number, t: number, out: ThreeTypes.Euler) {
         logo.yellowOrbit.getTangentAt(clamp01(t), orbitTangent);
@@ -265,7 +285,8 @@ export default function StarVoyageScene({
       }
       function rotationAt(p: number, out: ThreeTypes.Euler) {
         if (p >= finale.orbit) return orbitRotationAt(p, orbitTimeAt(p), out);
-        ensureMotion().tangentAt(p, tangentB);
+        if (narrow) ensureMotion().projectedTangentAt(p, tangentB);
+        else ensureMotion().tangentAt(p, tangentB);
         return orientAlong(p, tangentB, out);
       }
       function wakePointAt(p: number, out: ThreeTypes.Vector3) {
@@ -350,14 +371,13 @@ export default function StarVoyageScene({
         const ringOffset =
           (halfView + 3 * transform.scale + 2) *
           (1 - smoothRange(ringsEnter, ringsReady, p));
-        logo.group.position.set(cameraX + ringOffset, transform.y, 0);
+        logo.group.position.set(cameraX + transform.x + ringOffset, transform.y, 0);
         logo.group.scale.setScalar(transform.scale);
         logo.group.visible = p > ringsEnter && navigationVisibility > 0;
         logo.setClosedRings(p > ringsEnter ? orbitTimeAt(p) : -1);
         logo.setFlatten(seal);
         let shown = 0,
           nearest = -1;
-        const planetScale = (narrow ? 1.65 : 1.7) * (compact ? 0.9 : 1);
         camera.updateMatrixWorld();
         projection.multiplyMatrices(
           camera.projectionMatrix,
@@ -460,11 +480,11 @@ export default function StarVoyageScene({
           (1 - smoothRange(finale.orbit - 0.012, finale.orbit, p));
         renderer.render(scene, camera);
         if (sealedLogoRef.current) {
-          projected.set(finalWorldX(), transform.y, 0).project(camera);
+          projected.set(finalWorldX() + transform.x, transform.y, 0).project(camera);
           const x = (projected.x * 0.5 + 0.5) * width,
-            y = (-projected.y * 0.5 + 0.5) * height;
+            y = (-projected.y * 0.5 + 0.5) * drawHeight;
           temp
-            .set(finalWorldX() + 2.4 * transform.scale, transform.y, 0)
+            .set(finalWorldX() + transform.x + 2.4 * transform.scale, transform.y, 0)
             .project(camera);
           const size = Math.abs((temp.x - projected.x) * width);
           Object.assign(sealedLogoRef.current.style, {
@@ -486,7 +506,7 @@ export default function StarVoyageScene({
         );
         stage?.style.setProperty(
           "--star-y",
-          `${((hostOffsetY + (-projected.y * 0.5 + 0.5) * height) / stageHeight) * 100}%`,
+          `${((hostOffsetY + (-projected.y * 0.5 + 0.5) * drawHeight) / stageHeight) * 100}%`,
         );
         stage?.style.setProperty(
           "--reading-light",
@@ -565,7 +585,7 @@ export default function StarVoyageScene({
                 stageRect.right - 42,
                 rect.right - 42,
               ),
-              y = Math.max(
+              y = narrow ? title.top - 26 : Math.max(
                 rect.top + 26,
                 Math.min(title.top - 26, rect.bottom - 26),
               );
@@ -600,7 +620,7 @@ export default function StarVoyageScene({
             rect.left + 42,
             Math.min(titleX, stageRect.right - 42, rect.right - 42),
           );
-          const y = Math.max(
+          const y = narrow ? title.top - 26 : Math.max(
             rect.top + 26,
             Math.min(
               title.top - [26, 34, 22, 42][visit.index],
@@ -631,27 +651,50 @@ export default function StarVoyageScene({
         parkedScreenPoints = pixels;
       }
       function resize() {
+        const stage = host!.closest<HTMLElement>("[data-voyage-stage]");
+        if (!stage) return;
+        const stageRect = stage.getBoundingClientRect();
+        const composition = voyageComposition(stageRect.width, stageRect.height);
+        narrow = composition.stacked;
+        short = composition.short;
+        stage.dataset.voyageNarrow = String(narrow);
+        stage.dataset.voyageShort = String(short);
+        if (narrow) {
+          const copyHeight = Math.max(...Array.from(
+            stage.querySelectorAll<HTMLElement>("[data-voyage-copy], [data-voyage-final]"),
+            (el) => el.getBoundingClientRect().height,
+          ));
+          const fitted = voyageComposition(stageRect.width, stageRect.height, copyHeight);
+          stage.style.setProperty("--voyage-scene-height", `${fitted.sceneHeight}px`);
+          stage.style.setProperty("--voyage-copy-top", `${fitted.copyTop}px`);
+          stage.style.setProperty("--voyage-final-top", `${fitted.sceneHeight * 0.8 + 22}px`);
+        }
         const rect = host!.getBoundingClientRect();
         if (rect.width < 1 || rect.height < 1) return;
         width = rect.width;
         height = rect.height;
-        narrow = width / height < 1.15;
-        const stage = host!.closest<HTMLElement>("[data-voyage-stage]");
-        if (stage) stage.dataset.voyageNarrow = String(narrow);
+        camera.aspect = width / height;
+        camera.fov = narrow ? 42 : 38;
+        drawHeight = height + (narrow ? 128 : 0);
+        // Extend the canvas below the planet composition without changing its
+        // projection. The light can reach the heading with its whole halo.
+        if (narrow) camera.setViewOffset(width, height, 0, 0, width, drawHeight);
+        else camera.clearViewOffset();
+        camera.updateProjectionMatrix();
+        const halfHeight = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+        planetScale = (narrow
+          ? Math.min(3, Math.min(width * 0.42, height * 0.58) * 13 * halfHeight / height)
+          : 1.7) * (compact ? 0.9 : 1);
         wake.clear();
+        motion = undefined;
         const tailLength = 0;
         if (Math.abs(tailLength - configuredTailLength) > 0.00001) {
           logo.setOrbitTailLength(tailLength);
           configuredTailLength = tailLength;
           motion = undefined;
         }
-        camera.aspect = width / height;
-        camera.fov = narrow ? 42 : 38;
-        camera.updateProjectionMatrix();
         const maxRadius =
-          Math.max(...planetBoundingRadii) *
-          (narrow ? 1.65 : 1.7) *
-          (compact ? 0.9 : 1);
+          Math.max(...planetBoundingRadii) * planetScale;
         const halfView =
           Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) *
           ((narrow ? 11 : 16) + 2 + maxRadius) *
@@ -667,9 +710,7 @@ export default function StarVoyageScene({
           Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect,
         );
         const lastRadius =
-          planetBoundingRadii.at(-1)! *
-          (narrow ? 1.65 : 1.7) *
-          (compact ? 0.9 : 1);
+          planetBoundingRadii.at(-1)! * planetScale;
         const clearCameraX =
           planetWorldX(visits.length - 1) +
           ((narrow ? 11 : 16) + 2) * Math.tan(horizontalHalfAngle) +
@@ -701,7 +742,8 @@ export default function StarVoyageScene({
             `${hostOffsetY + height * 0.5}px`,
           );
         }
-        renderer.setSize(width, height, false);
+        renderer.setSize(width, drawHeight, false);
+        canvas!.style.height = `${drawHeight}px`;
         requestRender();
       }
       function lost(event: Event) {
@@ -750,6 +792,7 @@ export default function StarVoyageScene({
           attributeFilter: ["data-voyage-copy"],
         });
       document.fonts.addEventListener("loadingdone", queueMeasurement);
+      window.addEventListener("resize", queueMeasurement);
       void document.fonts.ready.then(() => {
         if (!disposed) queueMeasurement();
       });
@@ -759,6 +802,7 @@ export default function StarVoyageScene({
         cancelAnimationFrame(measureFrame);
         copyObserver.disconnect();
         document.fonts.removeEventListener("loadingdone", queueMeasurement);
+        window.removeEventListener("resize", queueMeasurement);
         unsubscribe?.();
         unsubscribeNavigation?.();
         unsubscribeFlight?.();

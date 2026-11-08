@@ -18,3 +18,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - La landing y el login tienen selector EN / ESP / CA. Mantener traducciones completas de esas superficies, incluidos estados del formulario. Las áreas internas siguen en catalán. Preferencias públicas en `?lang=` y cookie exclusiva de idioma público.
 - El estilo artístico del juego aún no está decidido: no usar imágenes de niveles como identidad de la landing. El lore de `Lore.md` sirve como contexto narrativo; no publicar sus spoilers.
 - Dirección pública elegida: espacio y colores del logo. Una fuente de luz cálida con halo y estela cruza trayectorias suaves; el scroll mueve planetas low-poly horizontalmente, entrando por la derecha y saliendo por la izquierda. Solo se ve un planeta cada vez. La luz se detiene cerca de cada título. El cierre sigue el trazo amarillo original, con los huecos de los anillos rellenos hasta el fundido al logo original, una vez detenido el movimiento. Las pausas de lectura deben permitir avanzar al seguir scrolleando. Evitar dioramas de niveles, emojis decorativos y pestañas alumno/profesor. Dirección y recursos: `docs/landing-direction.md`.
+
+
+## Recordatorio para la proxima sesion de trabajo
+
+Consultar SIGUIENTES_PASOS.md al retomar este repositorio en una nueva sesion. Si su casilla de recordatorio sigue pendiente, atender primero el primer prompt del usuario y, al final de esa primera respuesta, recordarle brevemente los cambios de cabecera, textos, fondos/parrafos y tipografia. Despues, marcar solo la casilla del recordatorio como realizada. No activar este recordatorio en la sesion en que se escribio ni iniciar el redisenyo sin que el usuario lo pida.

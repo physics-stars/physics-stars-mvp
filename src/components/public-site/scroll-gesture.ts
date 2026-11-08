@@ -4,6 +4,17 @@ export class ScrollGesture {
   private lastAmount = 0;
   private direction = 0;
   private decelerating = false;
+  absorbInertia(now: number, direction = -1) {
+    this.lastAt = now;
+    this.lastAmount = Infinity;
+    this.direction = direction;
+    this.decelerating = true;
+  }
+
+  /** A quiet gesture or its very small decaying tail can yield to a nearby stop. */
+  settling(now: number) {
+    return now - this.lastAt > 90 || (this.decelerating && this.lastAmount <= 3);
+  }
 
   read(delta: number, now: number, fresh = now - this.lastAt > 160) {
     const amount = Math.abs(delta);

@@ -18,10 +18,14 @@ export function createVoyageMotion(
   worldStep = 24,
   parkPoints?: readonly THREE.Vector3[],
   initialPoint?: THREE.Vector3,
+  viewport?: { halfWidth: number; halfHeight: number; planetScale?: number },
 ) {
   const cameraZ = narrow ? 11 : 16;
   const viewX = (p: number) => voyageCameraX(p, narrow, worldStep);
   const v = (x: number, y: number, z = 0) => new THREE.Vector3(x, y, z);
+  const fitX = viewport ? viewport.halfWidth * 0.8 / 0.32 : 1;
+  const fitY = viewport ? viewport.halfHeight / 0.384 : 1;
+  const gesture = (x: number, y: number, z = 0) => v(x * fitX, y * fitY, z);
   function project(point: THREE.Vector3, p: number) {
     const depth = cameraZ - point.z;
     return v((point.x - viewX(p)) / depth, point.y / depth, point.z);
@@ -81,25 +85,25 @@ export function createVoyageMotion(
   const readingKnots = [7, 11, 16, 21];
   const controls = [
     hero.clone(),
-    v(narrow ? -0.08 : 0.14, narrow ? 0.12 : 0.1),
-    v(narrow ? 0.04 : 0.3, narrow ? -0.09 : -0.08),
-    v(narrow ? 0.24 : 0.46, -0.14),
-    v(narrow ? 0.28 : 0.5, narrow ? 0.12 : 0.15),
-    v(narrow ? -0.16 : 0, narrow ? 0.16 : 0.28),
+    gesture(narrow ? -0.08 : 0.14, narrow ? 0.12 : 0.1),
+    gesture(narrow ? 0.04 : 0.3, narrow ? -0.09 : -0.08),
+    gesture(narrow ? 0.24 : 0.46, -0.14),
+    gesture(narrow ? 0.28 : 0.5, narrow ? 0.12 : 0.15),
+    gesture(narrow ? -0.16 : 0, narrow ? 0.16 : 0.28),
     p0.clone().addScaledVector(directions[0], narrow ? -0.12 : -0.14),
     p0.clone(),
     p0.clone(),
     p0.clone(),
-    blend(p0, p1, 0.58, -(narrow ? lowerRoom * 0.8 : 0.085), -2.4),
+    blend(p0, p1, 0.58, -(narrow ? lowerRoom * 0.8 * fitY : 0.085), -2.4),
     p1.clone(),
     p1.clone(),
     p1.clone(),
-    blend(p1, p2, 0.3, narrow ? 0.22 : 0.125, -0.8),
-    blend(p1, p2, 0.82, narrow ? 0.13 : 0.07, -3.5),
+    blend(p1, p2, 0.3, narrow ? 0.22 * fitY : 0.125, -0.8),
+    blend(p1, p2, 0.82, narrow ? 0.13 * fitY : 0.07, -3.5),
     p2.clone(),
     p2.clone(),
     p2.clone(),
-    blend(p2, p3, 0.26, -(narrow ? lowerRoom * 0.72 : 0.08), -2.5),
+    blend(p2, p3, 0.26, -(narrow ? lowerRoom * 0.72 * fitY : 0.08), -2.5),
     narrow
       ? p3.clone().addScaledVector(directions[3], -handles[3] * 1.8)
       : blend(p2, p3, 0.9, 0.1, -0.8).add(v(0.025, 0)),
@@ -313,7 +317,7 @@ export function createVoyageMotion(
     if (clock.velocity > 0 && clock.flight < visits.length) {
       const planetX = (clock.flight + 1) * worldStep + 4;
       const cx = (planetX - viewX(p)) / (cameraZ + 2),
-        radius = (narrow ? 1.65 : 1.7) / (cameraZ + 2);
+        radius = (viewport?.planetScale ?? (narrow ? 1.65 : 1.7)) / (cameraZ + 2);
       const distance = Math.hypot(q.x - cx, q.y);
       const proximity = 1 - smooth(clamp01((distance / radius - 1.05) / 0.6));
       const fade =
@@ -358,6 +362,11 @@ export function createVoyageMotion(
   return {
     positionAt,
     velocityAt,
+    projectedTangentAt(p: number, out: THREE.Vector3) {
+      spline(parameterAt(pacing(p).length), out, 1);
+      out.z = 0;
+      return out;
+    },
     projectedAt(p: number, out: THREE.Vector3) {
       projected(p, out);
       out.z = depthAt(p);

@@ -21,7 +21,7 @@ import styles from "./voyage.module.css";
 const Scene = dynamic(() => import("./StarVoyageScene"), {
   ssr: false,
 });
-const reducedQuery = "(prefers-reduced-motion: reduce), (max-height: 620px)";
+const reducedQuery = "(prefers-reduced-motion: reduce)";
 function subscribe(callback: () => void) {
   const media = window.matchMedia(reducedQuery);
   media.addEventListener("change", callback);
@@ -83,7 +83,7 @@ export function StarVoyage() {
   );
   useEffect(() => {
     if (linear || !finalTextReady || navigationTarget !== null) return;
-    const timer = window.setTimeout(() => setFinalExitReady(true), 650);
+    const timer = window.setTimeout(() => setFinalExitReady(true), 450);
     return () => window.clearTimeout(timer);
   }, [linear, finalTextReady, navigationTarget]);
   const scrollHintOpacity = useTransform(progress, [0, 0.012], [1, 0]);

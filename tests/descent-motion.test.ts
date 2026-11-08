@@ -25,6 +25,14 @@ test("the page waits until the flask arch is heading downward", () => {
   assert.ok(end.y - before.y > Math.abs(end.x - before.x) * 1.3);
   assert.deepEqual(route.departure(1), route.flight(0));
   assert.deepEqual(route.flight(1), route.entry(0));
+  const outgoing = { x: end.x - before.x, y: end.y - before.y };
+  const after = route.flight(0.00001);
+  const incoming = { x: after.x - end.x, y: after.y - end.y };
+  assert.ok((outgoing.x * incoming.x + outgoing.y * incoming.y) /
+    (Math.hypot(outgoing.x, outgoing.y) * Math.hypot(incoming.x, incoming.y)) > 0.9999);
+  const samples = Array.from({ length: 101 }, (_, i) => route.flight(i / 100));
+  assert.ok(samples.every((p, i) => !i || p.y >= samples[i - 1].y));
+  assert.ok(Math.max(...samples.map(p => p.x)) - Math.min(...samples.map(p => p.x)) > 15);
 });
 
 for (const [width, height, header, team, pilot] of [
@@ -66,11 +74,12 @@ for (const [width, height, header, team, pilot] of [
         previous = p;
       }
     }
-    const axis = route.flight(0).x;
+    const axis = route.flight(1).x;
     const signs = Array.from({ length: 199 }, (_, i) => route.flight((i + 1) / 200).x - axis)
       .filter((x) => Math.abs(x) > 0.01).map(Math.sign);
+    const wave = signs.slice(signs.indexOf(1));
     let turns = 0;
-    for (let i = 1; i < signs.length; i++) if (signs[i] !== signs[i - 1]) turns++;
+    for (let i = 1; i < wave.length; i++) if (wave[i] !== wave[i - 1]) turns++;
     assert.equal(turns, 1);
   });
 }
