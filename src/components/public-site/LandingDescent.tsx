@@ -28,7 +28,7 @@ import {
 } from "./descent-scroll";
 import { CurveTrail, type TrailCursor } from "./curve-trail";
 import { ScrollGesture } from "./scroll-gesture";
-import { followScroll, scrollTarget } from "./descent-controller";
+import { followScroll, scrollTarget, scrollHandoffEvent, type ScrollHandoff } from "./descent-controller";
 import { landingTrajectory, type LandingTrajectory } from "./landing-trajectory";
 
 type Index = 0 | 1 | 2;
@@ -439,7 +439,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     function animateFlaskFlash(time: number) {
       const motion = flaskFlash;
       if (!motion) return;
-      const q = clamp((time - motion.started) / 900);
+      const q = clamp((time - motion.started) / 300);
       const target = port(0, "left");
       if (!animated || !target.visible || q >= 1) {
         flaskFlash = null;
@@ -783,6 +783,17 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       active.requested = active.offset;
       moveBridge(delta);
     }
+    function handoff(event: Event) {
+      if (!animated) return;
+      const { delta, input } = (event as CustomEvent<ScrollHandoff>).detail;
+      if (!active) {
+        active = bridge(0, delta > 0 ? 0 : 1);
+        active.offset = scrollTarget(offsetAtPage(active, scrollY), 0, 0, bridgeLength(active));
+        active.requested = active.offset;
+      }
+      consume(delta, input);
+      event.preventDefault();
+    }
     function wheel(event: WheelEvent) {
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
       if (!event.deltaY) {
@@ -896,6 +907,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     window.addEventListener("pointerup", pointerUp, { passive: true });
     window.addEventListener("pointercancel", pointerUp, { passive: true });
     window.addEventListener("landing-navigate", navigate);
+    window.addEventListener(scrollHandoffEvent, handoff);
     window.addEventListener("landing-scroll-release", settle);
     preference();
     return () => {
@@ -920,6 +932,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       window.removeEventListener("pointerup", pointerUp);
       window.removeEventListener("pointercancel", pointerUp);
       window.removeEventListener("landing-navigate", navigate);
+      window.removeEventListener(scrollHandoffEvent, handoff);
       window.removeEventListener("landing-scroll-release", settle);
     };
   }, [clientReady]);

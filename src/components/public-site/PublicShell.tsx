@@ -177,7 +177,13 @@ function LandingNavigation({ locale }: { locale: Locale }) {
                 if (journey) delete journey.dataset.landingJump;
               });
             });
-            history.pushState(history.state, "", `#${id}`);
+            // Section jumps share one URL and never add a history entry.
+            if (location.hash)
+              history.replaceState(
+                history.state,
+                "",
+                location.pathname + location.search,
+              );
             setActive(id);
           }}
         >

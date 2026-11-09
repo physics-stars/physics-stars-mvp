@@ -106,7 +106,7 @@ cambian un destino limitado por la siguiente parada de lectura; el sobrante no
 pasa a otro slide. El imán usa ese mismo destino. La reversa descarta la cola
 anterior y la llegada absorbe la inercia, permitiendo reanudar con un gesto nuevo
 o con entrada continua deliberada tras una pausa breve. El flash del matraz
-conserva 900 ms y la iluminación de las barras 340 ms.
+dura 300 ms y la iluminación de las barras 340 ms.
 
 `pnpm test:motion` ejecuta 49 pruebas de geometría, scroll y estela. La revisión conjunta
 de movimiento, estela, gestos e imán suma 71 pruebas. Compilación, TypeScript y
@@ -135,6 +135,6 @@ La estela de los planetas mide 180 px en PC y 120 px en móvil. El último ajust
 de la primera diapositiva reduce únicamente su relleno inferior de 32 a 16 px;
 no modifica los espacios internos ni el tamaño del texto.
 
-Al regresar desde la primera diapositiva al logo, una pausa de 1800 ms descarta
+Al regresar desde la primera diapositiva al logo, una pausa de 900 ms descarta
 la entrada y vuelve a absorber su cola de inercia; un gesto nuevo permite seguir
 después. En móvil, los nombres y cargos se agrupan en columna con 3 px de separación.

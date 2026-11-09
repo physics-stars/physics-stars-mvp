@@ -36,7 +36,7 @@ export function Landing() {
     };
   }, []);
   return (
-    <main id="main">
+    <main id="main" className={styles.landing}>
       <StarVoyage />
       <LandingDescent key={locale}>
         <section

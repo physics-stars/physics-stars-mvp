@@ -1,4 +1,12 @@
-﻿.descent {
+﻿:global(html):has(.landing) {
+  /* The native thumb cannot represent the landing's reading pauses. */
+  scrollbar-width: none;
+}
+:global(html):has(.landing)::-webkit-scrollbar {
+  display: none;
+}
+
+.descent {
   --vessel-power: 1;
   --panel-power: 0;
   --pilot-power: 0;

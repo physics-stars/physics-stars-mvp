@@ -10,8 +10,10 @@ import {
 import { useMotionValue, type MotionValue } from "framer-motion";
 import { finale, smoothRange, visits, waypointStops } from "./voyage-timeline";
 import { ScrollGesture } from "./scroll-gesture";
+import { scrollHandoffEvent, type ScrollHandoff } from "./descent-controller";
 
 const checkpoints = waypointStops.slice(1);
+const maximumCueDistance = 28;
 export type VoyageNavigationFlight = {
   id: number;
   from: number;
@@ -145,7 +147,7 @@ export function useVoyageProgress(
         final = gate.point === waypointStops.at(-1);
       // On returning from slide one, discard every input during the reading
       // pause and keep its remaining inertia classified as the same gesture.
-      if (final && gate.returned && (!finalReadyRef.current || age < 1800)) {
+      if (final && gate.returned && (!finalReadyRef.current || age < 900)) {
         gesture.absorbInertia(performance.now());
         return false;
       }
@@ -222,7 +224,7 @@ export function useVoyageProgress(
       if (Math.abs(scrollY - end) > 2) return;
       cue = {
         from: scrollY,
-        distance: Math.min(28, Math.max(18, (innerHeight - headerRef.current) * 0.03)),
+        distance: Math.min(maximumCueDistance, Math.max(18, (innerHeight - headerRef.current) * 0.03)),
         started: performance.now(),
       };
       if (trackElement) trackElement.dataset.voyageCue = "peek";
@@ -295,19 +297,36 @@ export function useVoyageProgress(
       }
       schedule();
     }
-    function leaveVoyage(delta: number) {
-      // Hand over only this event's distance. The following sections use native
-      // scrolling and an interruptible magnet; there is no landing lock.
-      nativeExit = true;
+    function leaveVoyage(delta: number, input: Event) {
+      // Transfer this same input before any native scroll can cross a slide.
+      // The descent's RAF owns its distance and caps it at the first stop.
+      if (input.cancelable) input.preventDefault();
+      stopCue();
       gate = null;
       pending = null;
       bypass = null;
       velocity = 0;
       progress.set(1);
       mark();
-      window.scrollTo({ top: scrollY + delta, behavior: "instant" });
+      nativeExit = !window.dispatchEvent(new CustomEvent<ScrollHandoff>(
+        scrollHandoffEvent,
+        { detail: { delta, input }, cancelable: true },
+      ));
+      // Until the receiver is ready, keep the input here instead of leaking it
+      // to native scrolling. No ignored distance is saved for a later event.
+      if (!nativeExit) scrollToPoint(1);
     }
-    function release(direction: number, delta: number) {
+    function handoffAtExit(delta: number, input: Event) {
+      const b = bounds();
+      if (!nativeExit || !delta || !b) return false;
+      const end = b.start + b.length;
+      // Includes the small physical cue, even when touchstart already stopped
+      // it before its first frame. The descent captures later input itself.
+      if (scrollY < end - 2 || scrollY > end + maximumCueDistance + 2) return false;
+      leaveVoyage(delta, input);
+      return true;
+    }
+    function release(direction: number, delta: number, input: Event) {
       if (!gate) return;
       lastIntent = performance.now();
       const point = gate.point,
@@ -320,7 +339,7 @@ export function useVoyageProgress(
       velocity = 0;
       mark();
       if (!visit && direction > 0) {
-        leaveVoyage(delta);
+        leaveVoyage(delta, input);
         return;
       }
       const b = bounds();
@@ -466,7 +485,7 @@ export function useVoyageProgress(
         finalReadyRef.current && current >= checkpoints.at(-1)! - 0.00001;
       if (canLeave && delta > 0) {
         if (event.cancelable) event.preventDefault();
-        leaveVoyage(delta);
+        leaveVoyage(delta, event);
         return;
       }
       const proposed = Math.min(
@@ -588,11 +607,12 @@ export function useVoyageProgress(
         if (event.cancelable) event.preventDefault();
         return;
       }
+      if (handoffAtExit(delta, event)) return;
       if (!inside()) return;
       if (!delta) return;
       if (gate) {
         event.preventDefault();
-        if (canRelease(deliberate)) release(Math.sign(delta), delta);
+        if (canRelease(deliberate)) release(Math.sign(delta), delta, event);
         else scrollToPoint(gate.point);
         return;
       }
@@ -640,11 +660,12 @@ export function useVoyageProgress(
         if (event.cancelable) event.preventDefault();
         return;
       }
+      if (handoffAtExit(delta, event)) return;
       if (!inside()) return;
       if (gate) {
         event.preventDefault();
         if (canRelease(deliberate))
-          release(direction, delta);
+          release(direction, delta, event);
       } else {
         lastIntent = performance.now();
         consumeDelta(delta, event);
@@ -674,12 +695,13 @@ export function useVoyageProgress(
         if (event.cancelable) event.preventDefault();
         return;
       }
+      if (handoffAtExit(delta, event)) return;
       if (!inside()) return;
       if (gate) {
         event.preventDefault();
         if (canRelease(deliberate) && delta !== 0) {
           newTouch = false;
-          release(Math.sign(delta), delta);
+          release(Math.sign(delta), delta, event);
         }
       } else {
         lastIntent = performance.now();
