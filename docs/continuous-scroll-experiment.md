@@ -6,9 +6,14 @@ solo modifica el movimiento de la landing.
 
 ## Respuesta al gesto
 
+El espacio de scroll de los textos junto a los planetas usa
+`PLANET_READING_SCROLL_SCALE = 0.6` en `motion-settings.ts`, tanto en PC como
+en móvil. Solo reduce esos tramos; el inicio y la lectura final conservan su
+espacio previo y la gravedad mantiene su velocidad independiente.
+
 La velocidad global se configura únicamente en
 [`motion-settings.ts`](../src/components/public-site/motion-settings.ts):
-`DESKTOP_SPEED_MULTIPLIER = 1.25` y `MOBILE_SPEED_MULTIPLIER = 3`.
+`DESKTOP_SPEED_MULTIPLIER = 1.25` y `MOBILE_SPEED_MULTIPLIER = 2`.
 El valor 1 representa el ritmo base de escritorio. Los multiplicadores se
 aplican a sensibilidad, velocidades, suavizado, navegación, fundidos,
 destellos y animaciones CSS públicas. Los tiempos se dividen por el factor y
@@ -18,6 +23,8 @@ La detección móvil incluye pantallas de hasta 760 px o puntero táctil princip
 Los tiempos de red y de carga real de recursos no se modifican.
 
 La gravedad conserva su ritmo original y no depende de estos multiplicadores.
+Su destino en los textos planetarios es el 80 % del tramo plenamente visible,
+configurable con `PLANET_READING_ATTRACTION_POINT = 0.8`; no cambia su velocidad.
 En móvil, al soltar el dedo se mantiene una velocidad que decae progresivamente
 en el mismo controlador de scroll, en vez de añadir un único impulso recortado.
 Un toque o gesto nuevo cancela esa inercia. Continúa al pasar entre el viaje y

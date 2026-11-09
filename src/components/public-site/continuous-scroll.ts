@@ -1,5 +1,5 @@
 import { clamp01, finale, smoothRange, visits } from "./voyage-timeline";
-import { MOBILE_INERTIA_DECAY_MS, MOBILE_INERTIA_MAX_SPEED, MOBILE_INERTIA_MIN_SPEED,
+import { PLANET_READING_SCROLL_SCALE, PLANET_READING_ATTRACTION_POINT, MOBILE_INERTIA_DECAY_MS, MOBILE_INERTIA_MAX_SPEED, MOBILE_INERTIA_MIN_SPEED,
   MOBILE_INERTIA_MAX_DURATION_MS } from "./motion-settings";
 
 export const scrollSensitivity = 0.4;
@@ -37,7 +37,7 @@ const scrollSegments = [
   { from: 0, to: heroReadingEnd, scale: 1 },
   ...visits.flatMap((visit, index) => [
     { from: voyageFlights[index][0], to: visit.parked, scale: voyageFlightScale },
-    { from: visit.parked, to: visit.departure, scale: 1 },
+    { from: visit.parked, to: visit.departure, scale: PLANET_READING_SCROLL_SCALE },
   ]),
   { from: visits.at(-1)!.departure, to: finale.sealed, scale: voyageFlightScale },
   { from: finale.sealed, to: 1, scale: finalReadingScale },
@@ -45,8 +45,8 @@ const scrollSegments = [
 export const voyageScrollLength = scrollSegments.reduce((length, segment) =>
   length + (segment.to - segment.from) * segment.scale, 0);
 
-/** Compress flights and logo formation only. All text, including its entrance
- * and exit fades, keeps its original physical scroll distance. */
+/** Planet-side reading uses its own scroll scale, including entrance and exit
+ * fades. The intro and finale retain their independent original distances. */
 export function voyageScrollDistance(progress: number) {
   if (progress <= 0) return progress;
   let distance = 0;
@@ -108,7 +108,8 @@ export function planetReadingCenter(actual: number, requested: number, visiblePl
     return null;
   const visit = visits[visiblePlanet];
   if (!visit) return null;
-  return (visit.textIn + 0.004 + visit.textOut) / 2;
+  const readable = visit.textIn + 0.004;
+  return readable + (visit.textOut - readable) * PLANET_READING_ATTRACTION_POINT;
 }
 
 /** A delayed S-shaped attraction. Input cancels it immediately; its destination
