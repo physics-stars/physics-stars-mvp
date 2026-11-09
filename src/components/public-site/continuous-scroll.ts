@@ -1,4 +1,6 @@
 import { clamp01, finale, smoothRange, visits } from "./voyage-timeline";
+import { MOBILE_INERTIA_DECAY_MS, MOBILE_INERTIA_MAX_SPEED, MOBILE_INERTIA_MIN_SPEED,
+  MOBILE_INERTIA_MAX_DURATION_MS } from "./motion-settings";
 
 export const scrollSensitivity = 0.4;
 export const maximumInputLag = 90;
@@ -203,13 +205,38 @@ export function followVoyage(current: number, requested: number, velocity: numbe
 export class TouchMomentum {
   private at = 0;
   private velocity = 0;
-  start(now: number) { this.at = now; this.velocity = 0; }
+  private coast = 0;
+  private coastAge = 0;
+  get coasting() {
+    return Math.abs(this.coast) > MOBILE_INERTIA_MIN_SPEED && this.coastAge < MOBILE_INERTIA_MAX_DURATION_MS;
+  }
+  get coastVelocity() { return this.coasting ? this.coast : 0; }
+  cancelCoast() { this.coast = 0; this.coastAge = 0; }
+  resumeCoast(velocity: number) {
+    this.coast = Math.max(-MOBILE_INERTIA_MAX_SPEED, Math.min(MOBILE_INERTIA_MAX_SPEED, velocity));
+    this.coastAge = 0;
+  }
+  beginCoast(now: number) {
+    this.resumeCoast(now - this.at < 80 ? this.velocity : 0);
+    this.velocity = 0;
+  }
+  step(elapsed: number) {
+    if (!this.coasting) { this.cancelCoast(); return 0; }
+    const dt = Math.max(0, Math.min(32, elapsed));
+    const decay = Math.exp(-dt / MOBILE_INERTIA_DECAY_MS);
+    const delta = this.coast * MOBILE_INERTIA_DECAY_MS * (1 - decay);
+    this.coast *= decay;
+    this.coastAge += dt;
+    return delta;
+  }
+  start(now: number) { this.cancelCoast(); this.at = now; this.velocity = 0; }
   move(delta: number, now: number) {
     const dt = Math.max(8, now - this.at);
     this.velocity = this.velocity * 0.35 + delta / dt * 0.65;
     this.at = now;
   }
   release(now: number) {
+    this.cancelCoast();
     const distance = now - this.at < 60 ? this.velocity * 45 : 0;
     this.velocity = 0;
     return Math.max(-100, Math.min(100, distance));

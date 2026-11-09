@@ -116,8 +116,10 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       const b = bounds();
       write(1);
       const accepted = !window.dispatchEvent(new CustomEvent<ScrollHandoff>(scrollHandoffEvent,
-        { detail: { delta: Math.max(0, (requested - 1) * b.length), quietSince: lastInputAt }, cancelable: true }));
+        { detail: { delta: Math.max(0, (requested - 1) * b.length), quietSince: lastInputAt,
+          inertiaVelocity: touch.coastVelocity }, cancelable: true }));
       if (accepted) {
+        touch.cancelCoast();
         nativeExit = true;
         requested = 1;
         mark();
@@ -129,9 +131,11 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       if (directSeek) { followDirectSeek(time); return; }
       const dt = Math.min(previousTime ? time - previousTime : 16, 32);
       previousTime = time;
+      const inertia = touch.step(dt);
+      if (inertia) consume(inertia, undefined, true);
       const current = progress.get();
       const center = planetReadingCenter(current, requested, visiblePlanet());
-      requested = gravity.target(current, requested, center, dt, time - lastInputAt, inputSpeed());
+      requested = gravity.target(current, requested, center, dt, time - lastInputAt);
       const attracting = gravity.destination !== null;
       if (attracting)
         element!.dataset.voyageGravity = gravity.destination!.toFixed(6);
@@ -143,7 +147,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
         velocity = 0;
         write(destination);
         const attractionCenter = gravity.destination ?? center;
-        if (attractionCenter !== null && Math.abs(requested - attractionCenter) > 0.0000001) schedule();
+        if (touch.coasting || (attractionCenter !== null && Math.abs(requested - attractionCenter) > 0.0000001)) schedule();
         return;
       }
       // Gravity already supplies a timed C2 curve. A second follower and the
@@ -156,8 +160,9 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       write(next.position);
       schedule();
     }
-    function consume(delta: number, input?: Event) {
+    function consume(delta: number, input?: Event, inertial = false) {
       if (!delta || nativeExit) return;
+      if (!inertial) touch.cancelCoast();
       if (input?.cancelable) input.preventDefault();
       if (directSeek) { clearDirectSeek(); requested = progress.get(); }
       const b = bounds();
@@ -198,6 +203,8 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       consume(direction * distance, event);
     }
     function touchStart(event: TouchEvent) {
+      if (touch.coasting && !nativeExit) { requested = progress.get(); velocity = 0; }
+      if (mobileInput.matches && !nativeExit) { lastInputAt = performance.now(); gravity.reset(); }
       touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
       touch.start(performance.now());
     }
@@ -208,13 +215,21 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       touch.move(delta, performance.now());
       consume(delta, event);
     }
-    function touchEnd() { touchY = null; consume(touch.release(performance.now())); }
+    function touchEnd() {
+      touchY = null;
+      if (mobileInput.matches && !nativeExit) { touch.beginCoast(performance.now()); schedule(); }
+      else consume(touch.release(performance.now()));
+    }
+    function touchCancel() { touchY = null; touch.cancelCoast(); }
     function resume(event: Event) {
+      const detail = (event as CustomEvent<{ delta?: number; inertiaVelocity?: number }>).detail;
+      touch.cancelCoast();
+      if (mobileInput.matches) touch.resumeCoast(detail?.inertiaVelocity ?? 0);
       followingSectionScroll = false;
       gravity.reset();
       clearDirectSeek();
       nativeExit = false;
-      const delta = (event as CustomEvent<{ delta?: number }>).detail?.delta ?? 0;
+      const delta = detail?.delta ?? 0;
       requested = Math.max(0, voyageProgressAt(voyageScrollLength + delta / bounds().length));
       velocity = 0;
       previousTime = 0;
@@ -223,6 +238,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       schedule();
     }
     function navigate(event: Event) {
+      touch.cancelCoast();
       gravity.reset();
       clearDirectSeek();
       const detail = (event as CustomEvent<string | { id: string; behavior?: string }>).detail;
@@ -266,12 +282,14 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       if (!nativeExit) { write(progress.get()); schedule(); }
     }
     seekRef.current = (point) => {
+      touch.cancelCoast();
       followingSectionScroll = false;
       gravity.reset();
       clearDirectSeek(); nativeExit = false; requested = point; velocity = 0;
       write(point); schedule();
     };
     navigateRef.current = (point) => {
+      touch.cancelCoast();
       followingSectionScroll = false;
       gravity.reset();
       if (directSeek?.point === point) return;
@@ -298,7 +316,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     window.addEventListener("touchstart", touchStart, { passive: true });
     window.addEventListener("touchmove", touchMove, { passive: false });
     window.addEventListener("touchend", touchEnd, { passive: true });
-    window.addEventListener("touchcancel", touchEnd, { passive: true });
+    window.addEventListener("touchcancel", touchCancel, { passive: true });
     window.addEventListener("scroll", nativeScroll, { passive: true });
     window.addEventListener("resize", resized);
     window.addEventListener("landing-navigate", navigate);
@@ -316,7 +334,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       window.removeEventListener("touchstart", touchStart);
       window.removeEventListener("touchmove", touchMove);
       window.removeEventListener("touchend", touchEnd);
-      window.removeEventListener("touchcancel", touchEnd);
+      window.removeEventListener("touchcancel", touchCancel);
       window.removeEventListener("scroll", nativeScroll);
       window.removeEventListener("resize", resized);
       window.removeEventListener("landing-navigate", navigate);

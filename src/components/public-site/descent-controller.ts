@@ -1,5 +1,5 @@
 export const scrollHandoffEvent = "landing-scroll-handoff";
-export type ScrollHandoff = { delta: number; input?: Event; quietSince?: number };
+export type ScrollHandoff = { delta: number; input?: Event; quietSince?: number; inertiaVelocity?: number };
 
 /** Input is bounded by the next reading stop. No remainder belongs to a
  * later slide, even when a wheel event contains several viewport heights. */

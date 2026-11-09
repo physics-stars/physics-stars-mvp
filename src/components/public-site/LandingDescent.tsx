@@ -156,21 +156,31 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       svg.style.visibility = "visible";
       const elapsed = Math.min(32, previousTime ? time - previousTime : 16);
       previousTime = time;
+      if (driving && animated) {
+        const inertia = touch.step(elapsed);
+        if (inertia) consume(inertia, undefined, true);
+      }
       selectTravelTimeline();
       if (driving && animated) {
         const center = timeline.gravityCenter(requested);
-        requested = gravityTarget(position, requested, center, elapsed, time - lastInputAt, 64, speed());
-        position = followScroll(position, requested, elapsed, inputSpeed(), speed());
+        const gravityDriving = center !== null && time - lastInputAt >= slideGravityDelay &&
+          Math.abs(requested - position) <= 64;
+        requested = gravityTarget(position, requested, center, elapsed, time - lastInputAt, 64);
+        position = followScroll(position, requested, elapsed,
+          gravityDriving ? slideScrollSpeed : inputSpeed(), gravityDriving ? 1 : speed());
         if (position <= 0 && requested < 0) {
           driving = false;
           const delta = requested;
           position = 0; requested = 0;
-          window.dispatchEvent(new CustomEvent("landing-logo-return", { detail: { delta } }));
+          window.dispatchEvent(new CustomEvent("landing-logo-return", {
+            detail: { delta, inertiaVelocity: touch.coastVelocity },
+          }));
+          touch.cancelCoast();
         } else {
           lastWrittenY = timeline.at(position).page;
           window.scrollTo({ top: lastWrittenY, behavior: "instant" });
         }
-        if (center !== null && (time - lastInputAt) * speed() >= slideGravityDelay)
+        if (center !== null && time - lastInputAt >= slideGravityDelay)
           container.dataset.gravityTarget = center.toFixed(3);
         else delete container.dataset.gravityTarget;
       }
@@ -257,12 +267,12 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         lightCamera: scrollY.toFixed(3) });
       previousPosition = position;
       const center = timeline.gravityCenter(requested);
-      if ((driving && (Math.abs(position - requested) > 0.001 ||
+      if ((driving && (touch.coasting || Math.abs(position - requested) > 0.001 ||
         (center !== null && Math.abs(requested - center) > 0.01))) ||
         (animated && nearFlask && flashAge >= 0 && flashAge < 300)) schedule();
     }
-    function consume(delta: number, input?: Event) {
-      if (delta) interruptSectionScroll();
+    function consume(delta: number, input?: Event, inertial = false) {
+      if (delta && !inertial) { touch.cancelCoast(); interruptSectionScroll(); }
       if (!delta || !animated || !driving) return;
       if (input?.cancelable) input.preventDefault();
       travelDirection = Math.sign(delta);
@@ -274,7 +284,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     }
     function handoff(event: Event) {
       if (!animated) return;
-      const { delta, input, quietSince } = (event as CustomEvent<ScrollHandoff>).detail;
+      const { delta, input, quietSince, inertiaVelocity } = (event as CustomEvent<ScrollHandoff>).detail;
+      touch.cancelCoast();
+      if (mobileInput.matches) touch.resumeCoast(inertiaVelocity ?? 0);
       driving = true;
       position = timeline.positionAtPage(scrollY);
       travelDirection = Math.sign(delta) || travelDirection;
@@ -313,6 +325,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         : event.key.startsWith("Arrow") ? 70 : innerHeight * 0.8), event);
     }
     function touchStart(event: TouchEvent) {
+      if (touch.coasting && driving) requested = position;
+      if (mobileInput.matches && driving) lastInputAt = performance.now();
       touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
       touch.start(performance.now());
     }
@@ -321,7 +335,12 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       const y = event.touches[0].clientY, delta = touchY - y;
       touchY = y; touch.move(delta, performance.now()); consume(delta, event);
     }
-    function touchEnd() { touchY = null; consume(touch.release(performance.now())); }
+    function touchEnd() {
+      touchY = null;
+      if (mobileInput.matches && animated && driving) { touch.beginCoast(performance.now()); schedule(); }
+      else consume(touch.release(performance.now()));
+    }
+    function touchCancel() { touchY = null; touch.cancelCoast(); }
     function adopt() {
       navigationFrame = 0;
       driving = animated && voyage.dataset.scrollOwner !== "voyage" && scrollY >= geometry.logoEnd - 1;
@@ -336,6 +355,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       adopt();
     }
     function navigate(event: Event) {
+      touch.cancelCoast();
       driving = false;
       scrollingToSection = false;
       travelDirection = 1;
@@ -374,7 +394,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       }
       navigationFrame = requestAnimationFrame(adopt);
     }
-    function voyageNavigation() { driving = false; schedule(); }
+    function voyageNavigation() { touch.cancelCoast(); driving = false; schedule(); }
     function nativeScroll() {
       if (Math.abs(scrollY - lastWrittenY) <= 2) return;
       if (scrollingToSection) {
@@ -413,7 +433,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     window.addEventListener("touchstart", touchStart, { passive: true, capture: true });
     window.addEventListener("touchmove", touchMove, { passive: false, capture: true });
     window.addEventListener("touchend", touchEnd, { passive: true, capture: true });
-    window.addEventListener("touchcancel", touchEnd, { passive: true, capture: true });
+    window.addEventListener("touchcancel", touchCancel, { passive: true, capture: true });
     window.addEventListener("landing-navigate", navigate);
     window.addEventListener("landing-voyage-navigation", voyageNavigation);
     window.addEventListener(scrollHandoffEvent, handoff);
@@ -430,7 +450,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       window.removeEventListener("touchstart", touchStart, true);
       window.removeEventListener("touchmove", touchMove, true);
       window.removeEventListener("touchend", touchEnd, true);
-      window.removeEventListener("touchcancel", touchEnd, true);
+      window.removeEventListener("touchcancel", touchCancel, true);
       window.removeEventListener("landing-navigate", navigate);
       window.removeEventListener("landing-voyage-navigation", voyageNavigation);
       window.removeEventListener(scrollHandoffEvent, handoff);
