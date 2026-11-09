@@ -304,12 +304,18 @@ export function createVoyageMotion(
   }
   const coordinate = new THREE.Vector3(),
     tangent = new THREE.Vector3();
+  const projectedSample = new THREE.Vector3();
+  let projectedProgress = NaN, depthProgress = NaN, sampledDepth = 0;
   function projected(p: number, out: THREE.Vector3) {
-    const clock = pacing(p),
-      u = parameterAt(clock.length);
-    return spline(u, out);
+    if (p !== projectedProgress) {
+      const clock = pacing(p), u = parameterAt(clock.length);
+      spline(u, projectedSample);
+      projectedProgress = p;
+    }
+    return out.copy(projectedSample);
   }
   function depthAt(p: number) {
+    if (p === depthProgress) return sampledDepth;
     const clock = pacing(p),
       q = projected(p, coordinate);
     let z = q.z;
@@ -325,6 +331,8 @@ export function createVoyageMotion(
         smooth(clamp01((1 - clock.amount) / 0.12));
       z += (-4.4 - z) * proximity * fade;
     }
+    depthProgress = p;
+    sampledDepth = z;
     return z;
   }
   function positionAt(p: number, out: THREE.Vector3) {

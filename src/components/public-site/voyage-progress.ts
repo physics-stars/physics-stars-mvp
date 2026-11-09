@@ -34,11 +34,15 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     const touch = new TouchMomentum();
     const gravity = new PlanetGravity();
     let touchY: number | null = null;
-    function bounds() {
+    function measureBounds() {
       const start = element!.getBoundingClientRect().top + scrollY - headerRef.current;
       const total = element!.offsetHeight - innerHeight + headerRef.current;
       return { start, total, length: total / voyageScrollLength };
     }
+    let measuredBounds = measureBounds();
+    const bounds = () => measuredBounds;
+    const boundsObserver = new ResizeObserver(() => { measuredBounds = measureBounds(); });
+    boundsObserver.observe(element);
     const initial = bounds();
     let nativeExit = scrollY > initial.start + initial.total + 2;
     let requested = Math.max(0, Math.min(1, voyageProgressAt((scrollY - initial.start) / initial.length)));
@@ -254,6 +258,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     }
     function resized() {
       headerRef.current = innerWidth <= 760 ? 68 : 76;
+      measuredBounds = measureBounds();
       if (!nativeExit) { write(progress.get()); schedule(); }
     }
     seekRef.current = (point) => {
@@ -300,6 +305,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     return () => {
       disposed = true;
       cancelAnimationFrame(frame);
+      boundsObserver.disconnect();
       seekRef.current = () => {}; navigateRef.current = () => {};
       window.removeEventListener("wheel", wheel);
       window.removeEventListener("keydown", key);

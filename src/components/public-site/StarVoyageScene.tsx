@@ -96,6 +96,7 @@ export default function StarVoyageScene({
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.12;
       renderer.shadowMap.enabled = false;
+      canvas!.dataset.engine = `three.js r${THREE.REVISION}`;
       const scene = new THREE.Scene();
       let worldStep = 24;
       const planetWorldX = (index: number) => (index + 1) * worldStep + 4;
@@ -170,6 +171,7 @@ export default function StarVoyageScene({
         height = 1,
         drawHeight = 1,
         visible = true,
+        prepared = false,
         frame = 0,
         renderedFrames = 0;
       let previousReading = false,
@@ -325,6 +327,11 @@ export default function StarVoyageScene({
         ));
       });
       const visibilityPoint = new THREE.Vector3();
+      const visibilityProjection = new THREE.Matrix4();
+      let visibilityRevision = 0;
+      const visibilityCache = planets.groups.map(() => ({
+        cameraX: NaN, rotation: NaN, scale: NaN, revision: -1, full: false,
+      }));
       const planetVertices: Array<ThreeTypes.Vector3[] | null> = planets.groups.map(() => null);
       function silhouetteVertices(index: number) {
         if (planetVertices[index]) return planetVertices[index]!;
@@ -439,21 +446,26 @@ export default function StarVoyageScene({
           if (planet.visible) {
             shown++;
             nearest = index;
-            planet.updateMatrixWorld(true);
-            // Include the stage's real clipping, not just the camera frustum:
-            // portrait canvases extend below their composition for the light.
-            const insideStage = (corner: ThreeTypes.Vector3) => {
-              visibilityPoint.copy(corner).applyMatrix4(planet.matrixWorld).project(camera);
-              const x = hostOffsetX + (visibilityPoint.x * 0.5 + 0.5) * width;
-              const y = hostOffsetY + (-visibilityPoint.y * 0.5 + 0.5) * drawHeight;
-              return visibilityPoint.z >= -1 && visibilityPoint.z <= 1 &&
-                x >= 2 && x <= stageWidth - 2 && y >= 2 && y <= stageHeight - 2;
-            };
-            // Rings can fit while the empty corners of their bounding box do
-            // not. Use cached real vertices only when the fast box test fails.
-            const fullyVisible = planetCorners[index].every(insideStage) ||
-              silhouetteVertices(index).every(insideStage);
-            if (fullyVisible) fullPlanet = index;
+            const cached = visibilityCache[index];
+            if (cached.cameraX !== cameraX || cached.rotation !== planet.rotation.y ||
+              cached.scale !== planetScale || cached.revision !== visibilityRevision) {
+              planet.updateMatrixWorld(true);
+              visibilityProjection.multiplyMatrices(projection, planet.matrixWorld);
+              // The same full silhouette check, with one combined transform
+              // per vertex instead of three, and reused for unchanged poses.
+              const insideStage = (corner: ThreeTypes.Vector3) => {
+                visibilityPoint.copy(corner).applyMatrix4(visibilityProjection);
+                const x = hostOffsetX + (visibilityPoint.x * 0.5 + 0.5) * width;
+                const y = hostOffsetY + (-visibilityPoint.y * 0.5 + 0.5) * drawHeight;
+                return visibilityPoint.z >= -1 && visibilityPoint.z <= 1 &&
+                  x >= 2 && x <= stageWidth - 2 && y >= 2 && y <= stageHeight - 2;
+              };
+              cached.full = planetCorners[index].every(insideStage) ||
+                silhouetteVertices(index).every(insideStage);
+              cached.cameraX = cameraX; cached.rotation = planet.rotation.y;
+              cached.scale = planetScale; cached.revision = visibilityRevision;
+            }
+            if (cached.full) fullPlanet = index;
           }
         }
         if (
@@ -564,7 +576,8 @@ export default function StarVoyageScene({
           "--reading-light",
           String(lightFocus * navigationVisibility),
         );
-        Object.assign(canvas!.dataset, {
+        renderedFrames++;
+        if (process.env.NODE_ENV !== "production") Object.assign(canvas!.dataset, {
           engine: "three.js r187",
           progress: p.toFixed(6),
           navigationVisibility: navigationVisibility.toFixed(6),
@@ -591,7 +604,7 @@ export default function StarVoyageScene({
           tailY: trailPositions[(trailCount - 1) * 3 + 1].toFixed(5),
           tailZ: trailPositions[(trailCount - 1) * 3 + 2].toFixed(5),
           drawCalls: String(renderer.info.render.calls),
-          renderedFrames: String(++renderedFrames),
+          renderedFrames: String(renderedFrames),
           logoExact: String(seal > 0.999),
           ringsVisible: String(logo.group.visible),
           ringsOffset: ringOffset.toFixed(5),
@@ -600,13 +613,14 @@ export default function StarVoyageScene({
         });
         if (fullPlanet !== previousFullPlanet) {
           previousFullPlanet = fullPlanet;
+          canvas!.dataset.fullyVisiblePlanet = String(fullPlanet);
           host!.closest("#idea")?.dispatchEvent(new Event("voyage-visibility-change"));
         }
         loadingState("ready");
         if (!focusSettled) requestRender();
       }
       function requestRender() {
-        if (!frame && !disposed && visible && !document.hidden)
+        if (prepared && !frame && !disposed && visible && !document.hidden)
           frame = requestAnimationFrame(render);
       }
       let configuredTailLength = -1;
@@ -711,6 +725,7 @@ export default function StarVoyageScene({
         parkedScreenPoints = pixels;
       }
       function resize() {
+        visibilityRevision++;
         const stage = host!.closest<HTMLElement>("[data-voyage-stage]");
         if (!stage) return;
         const stageRect = stage.getBoundingClientRect();
@@ -883,6 +898,21 @@ export default function StarVoyageScene({
         renderer.dispose();
         renderer.forceContextLoss();
       };
+      // Compile every material during loading, including the planets that
+      // start offscreen. No frame is painted with these temporary flags.
+      const hidden: ThreeTypes.Object3D[] = [];
+      scene.traverse(object => {
+        if (!object.visible) { hidden.push(object); object.visible = true; }
+      });
+      try {
+        await renderer.compileAsync(scene, camera);
+      } catch {
+        // Keep the normal first-render compilation fallback on unsupported
+        // drivers; geometry, materials and render settings stay unchanged.
+      } finally {
+        hidden.forEach(object => { object.visible = false; });
+      }
+      if (!disposed) { prepared = true; requestRender(); }
     }
     void initialise().catch(() => {
       loadingState("unavailable");

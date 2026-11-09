@@ -59,6 +59,10 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     let frame = 0, navigationFrame = 0, previousTime = 0, lastInputAt = -Infinity;
     let position = 0, requested = 0, lastWrittenY = NaN, previousPosition = 0;
     let touchY: number | null = null, flashed = false, flashAt = -Infinity;
+    let rootTop = 0, rootBottom = 0;
+    let flaskBounds = { left: 0, top: 0, width: 0, height: 0 };
+    const paintedPowers = [NaN, NaN, NaN];
+    const paintedSides: Array<LightSide | null> = [null, null, null];
 
     function measure() {
       const old = timeline?.at(position), backlog = requested - position;
@@ -77,6 +81,17 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       geometry = { width: document.documentElement.clientWidth, height: innerHeight, header,
         logoEnd: voyage.getBoundingClientRect().bottom + scrollY - innerHeight,
         footerTop: container.querySelector("footer")!.getBoundingClientRect().top + scrollY, sections: measured };
+      const rootBounds = container.getBoundingClientRect();
+      const teamBounds = sections[1].getBoundingClientRect();
+      const flask = vessel.getBoundingClientRect();
+      rootTop = rootBounds.top + scrollY;
+      rootBottom = rootBounds.bottom + scrollY;
+      flaskBounds = { left: flask.left, top: flask.top + scrollY, width: flask.width, height: flask.height };
+      container.style.setProperty("--team-top", `${teamBounds.top - rootBounds.top}px`);
+      container.style.setProperty("--team-height", `${teamBounds.height}px`);
+      panel.style.setProperty("--panel-light-y", "0px");
+      svg.setAttribute("viewBox", `0 0 ${geometry.width} ${geometry.height}`);
+      svg.style.width = `${geometry.width}px`; svg.style.height = `${geometry.height}px`;
       forwardTimeline = createDescentTimeline(geometry);
       returnTimeline = createDescentTimeline(geometry, true);
       timeline = returning ? returnTimeline : forwardTimeline;
@@ -112,6 +127,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     }
     function paintPower(index: number, value: number, side: LightSide) {
       const power = clamp(value), name = ["vessel", "panel", "pilot"][index];
+      if (paintedPowers[index] === power && paintedSides[index] === side) return;
+      paintedPowers[index] = power; paintedSides[index] = side;
       container.style.setProperty(`--${name}-power`, String(power));
       if (index > 0) {
         bars[index - 1].style.setProperty("--charge", String(power));
@@ -126,6 +143,13 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     function render(time: number) {
       frame = 0;
       if (disposed || !timeline) return;
+      if (!driving && !scrollingToSection &&
+        (rootTop - scrollY >= geometry.height || rootBottom - scrollY <= geometry.header)) {
+        svg.style.visibility = "hidden";
+        previousTime = 0;
+        return;
+      }
+      svg.style.visibility = "visible";
       const elapsed = Math.min(32, previousTime ? time - previousTime : 16);
       previousTime = time;
       selectTravelTimeline();
@@ -147,11 +171,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         else delete container.dataset.gravityTarget;
       }
       const state = timeline.at(position), { segment, distance, local } = state;
-      const rootBounds = container.getBoundingClientRect(), g = geometry;
-      const teamBounds = sections[1].getBoundingClientRect();
-      container.style.setProperty("--team-top", `${teamBounds.top - rootBounds.top}px`);
-      container.style.setProperty("--team-height", `${teamBounds.height}px`);
-      panel.style.setProperty("--panel-light-y", "0px");
+      const rootBounds = { top: rootTop - scrollY, bottom: rootBottom - scrollY }, g = geometry;
       const powers = [0, 0, 0];
       let owner = segment.index, point = port(owner, sides[owner]);
       let alpha = owner === 0 ? 1 : 0, docked = true;
@@ -211,11 +231,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       else delete container.dataset.flaskFlash;
       const shown = animated && rootBounds.top < g.height && rootBounds.bottom > g.header;
       const trace = curveTrail.update(shown && alpha > 0.01 ? cursor : null, time);
-      svg.setAttribute("viewBox", `0 0 ${g.width} ${g.height}`);
-      svg.style.width = `${g.width}px`; svg.style.height = `${g.height}px`;
       svg.style.clipPath = `inset(${Math.max(g.header, rootBounds.top)}px 0 ${Math.max(0, g.height - rootBounds.bottom)}px 0)`;
-      const flask = vessel.getBoundingClientRect();
-      maskNode.setAttribute("transform", `translate(${flask.left} ${flask.top}) scale(${flask.width / 420} ${flask.height / 290})`);
+      maskNode.setAttribute("transform", `translate(${flaskBounds.left} ${flaskBounds.top - scrollY}) scale(${flaskBounds.width / 420} ${flaskBounds.height / 290})`);
       starNode.setAttribute("transform", `translate(${point.x} ${point.y})`);
       starNode.style.opacity = String(shown ? alpha : 0);
       auraNode.style.opacity = String(0.65 + flash * 0.35);
@@ -382,6 +399,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     const resize = new ResizeObserver(measure);
     sections.forEach(section => resize.observe(section));
     resize.observe(vessel); bars.forEach(bar => resize.observe(bar));
+    resize.observe(voyage);
     document.fonts.addEventListener("loadingdone", measure);
     media.addEventListener("change", preference);
     window.addEventListener("resize", measure);
