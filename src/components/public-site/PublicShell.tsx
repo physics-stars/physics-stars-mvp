@@ -11,6 +11,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { Exo_2 } from "next/font/google";
+import localFont from "next/font/local";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
 import { languageNames, locales, publicCopy, type Locale } from "./copy";
@@ -21,6 +22,25 @@ const brandFont = Exo_2({
   style: "normal",
   display: "swap",
   variable: "--font-physics-brand",
+});
+
+const readingFont = localFont({
+  src: [
+    { path: "./fonts/barlow-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/barlow-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/barlow-600.woff2", weight: "600", style: "normal" },
+  ],
+  display: "swap",
+  variable: "--font-public-reading",
+});
+
+const displayFont = localFont({
+  src: [
+    { path: "./fonts/barlow-semi-condensed-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/barlow-semi-condensed-600.woff2", weight: "600", style: "normal" },
+  ],
+  display: "swap",
+  variable: "--font-public-display",
 });
 
 const LocaleContext = createContext<Locale>("ca");
@@ -40,7 +60,7 @@ export function PublicShell({
     const previous = document.documentElement.lang;
     const previousBackground = document.body.style.backgroundColor;
     document.documentElement.lang = locale;
-    document.body.style.backgroundColor = login ? "#f2f1f8" : "#080a18";
+    document.body.style.backgroundColor = login ? "#f5f3f9" : "#080a18";
     return () => {
       document.documentElement.lang = previous;
       document.body.style.backgroundColor = previousBackground;
@@ -50,7 +70,7 @@ export function PublicShell({
   return (
     <LocaleContext value={locale}>
       <div
-        className={`${brandFont.variable} ${styles.site} ${login ? styles.loginSite : ""}`}
+        className={`${brandFont.variable} ${readingFont.variable} ${displayFont.variable} ${styles.site} ${login ? styles.loginSite : ""}`}
         lang={locale}
       >
         <a className={styles.skip} href="#main">
@@ -173,6 +193,7 @@ export function Brand({ locale }: { locale: Locale }) {
     <Link
       href={`/?lang=${locale}`}
       aria-label="Physics Stars"
+      translate="no"
       className={styles.brand}
     >
       <Image src="/logo.svg" alt="" width={36} height={36} />
@@ -208,7 +229,7 @@ function LanguageSwitch() {
               document.cookie = `physics-stars-public-language=${language}; Path=/; Max-Age=31536000; SameSite=Lax`;
             }}
           >
-            {language === "es" ? "ESP" : language.toUpperCase()}
+            {language.toUpperCase()}
           </Link>
         );
       })}

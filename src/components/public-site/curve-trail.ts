@@ -7,6 +7,7 @@ export type TrailCursor = {
   min: number;
   max: number;
   at: LightPath;
+  hold?: boolean;
 };
 
 /** Interpolate on the curve itself, never between old frame positions. */
@@ -42,7 +43,7 @@ export class CurveTrail {
       this.previous = cursor.value;
       this.movedAt = time;
     }
-    const opacity = 1 - ease((time - this.movedAt - 120) / 500);
+    const opacity = cursor.hold ? 1 : 1 - ease((time - this.movedAt - 120) / 500);
     if (!this.direction || opacity <= 0) return { d: "", opacity: 0, points: [] as LightPoint[] };
     const points = [cursor.at(cursor.value)];
     const limit = Math.max(cursor.min, Math.min(cursor.max, this.origin));

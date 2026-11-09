@@ -44,3 +44,14 @@ test("docking clears the tail and an idle curve fades instead of extending", () 
   assert.equal(trail.update(cursor(300), 700).opacity, 0);
   assert.equal(trail.update(null, 701).d, "");
 });
+
+test("a reading pause retains the same trail until the journey resumes", () => {
+  const trail = new CurveTrail();
+  trail.update({ ...cursor(100), hold: true }, 0);
+  const paused = trail.update({ ...cursor(100), hold: true }, 4000);
+  assert.equal(paused.opacity, 1);
+  assert.ok(paused.points.length > 10);
+  const resumed = trail.update({ ...cursor(120), hold: true }, 4016);
+  assert.equal(resumed.opacity, 1);
+  assert.deepEqual(resumed.points.at(-1), at(120));
+});

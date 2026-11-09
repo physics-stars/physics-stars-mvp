@@ -2,12 +2,12 @@
   --vessel-power: 1;
   --panel-power: 0;
   --pilot-power: 0;
-  --descent-ink: #241c38;
-  --descent-muted: #686176;
+  --descent-ink: #2a223b;
+  --descent-muted: #62596f;
   --descent-purple: #7542ad;
   position: relative;
   isolation: isolate;
-  background: #fff;
+  background: #f8f7fb;
   color: var(--descent-ink);
 }
 .descent::before {
@@ -15,7 +15,7 @@
   position: absolute;
   inset: var(--team-top, 0) 0 auto;
   height: var(--team-height, 0);
-  background: #faf9fc;
+  background: #eee9f5;
   pointer-events: none;
 }
 .descent :is(a, button):focus-visible {
@@ -28,9 +28,10 @@
 }
 .overview,
 .about {
-  padding: 48px max(7.5vw, calc((100vw - 1280px) / 2)) 32px;
+  padding: clamp(28px, 4svh, 42px) max(7.5vw, calc((100vw - 1280px) / 2)) 32px;
 }
 .overview {
+  padding-bottom: 16px;
   display: grid;
   grid-template-columns: 1fr 1.08fr;
   grid-template-rows: 1fr auto;
@@ -42,7 +43,7 @@
   align-self: center;
 }
 .overviewIntro,
-.overviewSteps,
+.overviewMethod,
 .aboutHeading,
 .aboutBody,
 .pilotContent,
@@ -53,24 +54,26 @@
 .sectionLabel,
 .pilotStatus {
   color: var(--descent-purple);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.6;
-  margin-bottom: 24px !important;
+  margin-bottom: 22px !important;
 }
+.sectionLabel { display: flex; align-items: center; gap: 12px; }
+.sectionLabel::before { content: ""; width: 24px; height: 2px; background: #9c7abd; }
 .overviewIntro h2,
 .aboutHeading h2 {
-  font-size: clamp(38px, 4.1vw, 60px);
-  line-height: 1.08;
-  font-weight: 500;
-  letter-spacing: -0.055em;
+  font-size: clamp(48px, 5.3vw, 80px);
+  line-height: 1.01;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   max-width: 560px;
 }
 .overviewIntro > p:not(.sectionLabel) {
   max-width: 450px;
   color: var(--descent-muted);
-  font-size: 15px;
-  line-height: 1.85;
+  font-size: 17px;
+  line-height: 1.65;
   margin-top: 26px;
 }
 .glassVessel {
@@ -82,6 +85,9 @@
   justify-self: start;
   width: 156px;
   aspect-ratio: 420 / 290;
+  /* Reserve the existing light arc and halo above the neck, even when the
+     intro fills its grid row at larger text sizes or in a short viewport. */
+  margin-top: 64px;
 }
 .glassVessel svg {
   display: block;
@@ -91,47 +97,75 @@
 .vesselSpark {
   display: none;
 }
-.overviewSteps {
+.overviewMethod {
   grid-column: 2;
   grid-row: 1 / 3;
   align-self: center;
   display: grid;
-  gap: 25px;
+  gap: 24px;
 }
-.overviewSteps article {
+.overviewSteps {
+  display: grid;
+  gap: 20px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.overviewSteps li {
+  position: relative;
   display: flex;
   align-items: start;
   gap: 20px;
 }
-.overviewSteps article > span {
-  flex: 0 0 24px;
-  padding-top: 4px;
-  color: #a493b6;
-  font-size: 10px;
+.overviewSteps li > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  height: 30px;
+  margin-top: 2px;
+  border: 1px solid #cbb9df;
+  border-radius: 50%;
+  color: #795497;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+.overviewSteps li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 39px;
+  bottom: -12px;
+  width: 1px;
+  background: #e0d5ec;
+}
 .overviewSteps h3 {
-  font-size: 16px;
-  font-weight: 550;
-  line-height: 1.5;
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
 }
 .overviewSteps p {
   margin-top: 7px;
   color: var(--descent-muted);
-  font-size: 13px;
-  line-height: 1.8;
+  font-size: 16px;
+  line-height: 1.6;
 }
-.overviewSteps aside {
-  padding-top: 19px;
-  margin-left: 44px;
-  border-top: 1px solid #e6e0ec;
+.teacherNote {
+  padding: 18px 22px;
+  margin-left: 50px;
+  border-radius: 8px;
+  background: #ece5f4;
 }
-.overviewSteps aside h3 {
+.teacherNote h3 {
+  font-size: 22px;
+  font-weight: 500;
+  color: #573b76;
+}
+.teacherNote p {
+  margin-top: 8px;
+  color: #62536f;
   font-size: 14px;
-  color: #65418a;
-}
-.overviewSteps aside p {
-  font-size: 12px;
+  line-height: 1.6;
 }
 .about {
   display: grid;
@@ -140,20 +174,24 @@
   gap: 36px 7vw;
 }
 .aboutHeading {
+  container-type: inline-size;
   grid-column: 1;
   grid-row: 1;
   align-self: center;
 }
+.aboutHeading h2 { font-size: clamp(30px, 10.8cqw, 80px); }
+.aboutHeading h2 > span { display: block; white-space: nowrap; }
 .aboutBody {
   grid-column: 2;
   grid-row: 1;
   align-self: center;
 }
 .aboutBody p {
-  font-size: 14px;
-  line-height: 1.9;
+  font-size: 17px;
+  line-height: 1.7;
   color: var(--descent-muted);
 }
+.aboutBody p + p { margin-top: 20px; }
 .team {
   position: relative;
   z-index: 2;
@@ -164,7 +202,9 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 32px;
+  padding-top: 22px;
 }
+.team > .energyBar { top: 0; bottom: auto; }
 .team::before {
   content: "";
   position: absolute;
@@ -186,8 +226,9 @@
 .teamPhoto {
   position: relative;
   aspect-ratio: 1.65;
+  max-height: calc(100svh - 220px);
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 8px;
   background: #e5deed;
 }
 .teamPhoto img {
@@ -206,12 +247,12 @@
   padding: 15px 0 19px;
 }
 .teamCaption h3 {
-  font-size: 16px;
+  font-size: 24px;
   font-weight: 500;
   letter-spacing: -0.025em;
 }
 .teamCaption span {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--descent-muted);
 }
 .outroScreen {
@@ -225,7 +266,7 @@
   grid-template-columns: 1.35fr 0.8fr;
   grid-template-rows: 1fr auto;
   gap: 36px 6vw;
-  padding: 48px max(7.5vw, calc((100vw - 1280px) / 2)) 36px;
+  padding: clamp(28px, 4svh, 40px) max(7.5vw, calc((100vw - 1280px) / 2)) 36px;
 }
 .pilotContent {
   max-width: 760px;
@@ -234,23 +275,33 @@
   align-self: center;
 }
 .pilotStatus {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+}
+.pilotStatus::before {
+  content: "";
+  width: 24px;
+  height: 2px;
+  background: #9c7abd;
 }
 .pilot h2 {
   max-width: 700px;
-  font-size: clamp(44px, 4.8vw, 70px);
-  line-height: 1.05;
-  font-weight: 500;
-  letter-spacing: -0.055em;
+  font-size: clamp(52px, 5.5vw, 84px);
+  line-height: 1.02;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 .pilotContent > p:not(.pilotStatus) {
   max-width: 520px;
   margin-top: 28px;
-  font-size: 15px;
-  line-height: 1.85;
+  font-size: 17px;
+  line-height: 1.65;
   color: var(--descent-muted);
 }
 .pilotAction {
+  container-type: inline-size;
   position: relative;
   z-index: 2;
   width: min(360px, 100%);
@@ -265,16 +316,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   width: 100%;
   min-height: 68px;
   padding: 16px 0;
   color: var(--descent-ink);
-  font-size: clamp(24px, 1.9vw, 29px);
+  font-family: var(--font-public-display), sans-serif;
+  font-size: clamp(18px, 8.3cqw, 36px);
   font-weight: 500;
   line-height: 1.25;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
 }
+.pilotNote { color: var(--descent-muted); font-size: 15px; margin-bottom: 10px !important; }
+.buttonLabel { white-space: nowrap; }
 .energyBar {
   --charge: 0;
   position: absolute;
@@ -347,7 +401,7 @@
 }
 .buttonLabel {
   opacity: calc(0.32 + 0.68 * var(--pilot-power, 0));
-  text-wrap: balance;
+  text-wrap: nowrap;
 }
 .primaryButton:is(:hover, :focus-visible) :is(.buttonLabel, .buttonArrow) {
   opacity: 1;
@@ -374,7 +428,7 @@
   gap: 28px;
   padding: 26px max(7.5vw, calc((100vw - 1280px) / 2));
   border-top: 1px solid #eae4f0;
-  background: #faf9fc;
+  background: #eee9f5;
 }
 .footer a[aria-label="Physics Stars"] {
   color: var(--descent-ink);
@@ -388,7 +442,7 @@
 }
 .footer > div > p {
   margin: 9px 0 0 40px;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--descent-muted);
 }
 .footerNotes {
@@ -397,7 +451,7 @@
 }
 .footerNotes p {
   margin: 0 !important;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--descent-muted);
 }
 .footerNotes a {
@@ -442,27 +496,27 @@
   }
   .overviewIntro h2,
   .aboutHeading h2 {
-    font-size: clamp(36px, 7.2vw, 52px);
+    font-size: clamp(43px, 8.8vw, 64px);
   }
   .overviewIntro > p:not(.sectionLabel),
   .aboutBody p {
-    font-size: 14px;
+    font-size: 16px;
   }
-  .overviewSteps {
+  .overviewMethod {
     grid-column: 1;
     grid-row: 2;
     gap: 24px;
   }
-  .overviewSteps article {
+  .overviewSteps li {
     gap: 15px;
   }
-  .overviewSteps aside {
-    margin-left: 39px;
+  .teacherNote {
+    margin-left: 45px;
   }
   .glassVessel {
     grid-column: 1;
     grid-row: 3;
-    margin-top: 10px;
+    margin-top: 48px;
   }
   .sectionLabel,
   .pilotStatus {
@@ -476,59 +530,73 @@
     grid-column: 1;
     grid-row: 2;
   }
+  .aboutHeading h2 > span { display: inline; white-space: normal; }
+  .about { padding-inline: 32px; }
   .team {
     grid-column: 1;
     grid-row: 3;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: clamp(8px, 2.8vw, 20px);
+    padding-top: 20px;
   }
   .teamPhoto {
-    aspect-ratio: 1.25;
+    aspect-ratio: 0.95;
+    max-height: calc(100svh - 220px);
   }
-  .team > .energyBar {
-    left: 32px;
-    right: 32px;
-  }
-  .primaryButton > .energyBar {
-    right: 64px;
-  }
+  .team > .energyBar { left: 10px; right: 10px; }
+  .team article { container-type: inline-size; }
   .teamCaption {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 3px;
     padding-top: 12px;
   }
   .teamCaption h3 {
-    font-size: 13px;
-    margin-bottom: 5px;
+    font-size: clamp(11px, 13.6cqw, 22px);
+    margin: 0;
+    line-height: 1.2;
+    white-space: nowrap;
   }
   .teamCaption span {
-    font-size: 10px;
+    font-size: clamp(9px, 10.5cqw, 13px);
+    line-height: 1.3;
+    white-space: nowrap;
   }
   .pilot {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr auto;
     gap: 40px;
-    padding: 44px 24px 32px;
+    padding: 44px 32px 32px;
   }
   .pilotContent {
     grid-column: 1;
     grid-row: 1;
   }
   .pilot h2 {
-    font-size: clamp(43px, 8.5vw, 64px);
+    font-size: clamp(46px, 9.4vw, 68px);
   }
   .pilotContent > p:not(.pilotStatus) {
-    font-size: 14px;
+    font-size: 16px;
   }
   .pilotAction {
     grid-column: 1;
     grid-row: 2;
-    width: min(320px, 100%);
+    width: calc(100% - 12px);
+    justify-self: start;
   }
-  .primaryButton {
-    font-size: 27px;
+  .primaryButton,
+  .primaryButton:lang(en) {
+    font-size: clamp(16px, 8.3cqw, 30px);
+    gap: 12px;
+    padding-bottom: 14px;
   }
+  .buttonLabel { white-space: nowrap; }
+  .buttonArrow { width: 22px; height: 22px; }
   .footer {
-    padding: 26px 24px;
+    padding: 26px 32px;
     flex-wrap: wrap;
     gap: 24px;
   }
@@ -542,25 +610,16 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .teamCaption {
-    display: block;
     padding-block: 10px 18px;
   }
-  .teamCaption h3 {
-    font-size: clamp(10px, 3.1vw, 13px);
-    margin-bottom: 5px;
-    overflow-wrap: anywhere;
-  }
-  .teamCaption span {
-    font-size: 9px;
-  }
-  .overviewSteps article {
+  .overviewSteps li {
     gap: 12px;
   }
-  .overviewSteps article > span {
-    flex-basis: 24px;
+  .overviewSteps li > span {
+    flex-basis: 30px;
   }
-  .overviewSteps aside {
-    margin-left: 36px;
+  .teacherNote {
+    margin-left: 42px;
   }
   .footer > div > p {
     margin-left: 0;

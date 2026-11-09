@@ -55,6 +55,16 @@ prisma/
 
    Obre [http://localhost:3000](http://localhost:3000).
 
+## Comprovacions del moviment
+
+```bash
+pnpm run test:motion
+```
+
+Comprova la continuïtat, el marge lateral i l'entrada a les barres en diferents
+proporcions de pantalla, incloses les seccions altes i el recorregut invers.
+Aquestes proves ajuden a detectar regressions quan canvien els textos o la composició.
+
 ## Autenticació
 
 El sistema d'autenticació és manual i està dissenyat seguint les

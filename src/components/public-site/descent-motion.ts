@@ -48,6 +48,67 @@ export function splitRoute(
     : { departure: pieces[0], flight: pieces[1], entry: pieces[2] };
 }
 
+/** Keep the halo in the content gutter, using the real bar even when it is
+ * below the viewport. A temporary waiting point must never set this lane. */
+export function glassLane(neckX: number, barX: number, width: number, mobile = width <= 760) {
+  if (mobile) return 18;
+  const inset = Math.min(40, Math.max(28, width * 0.025));
+  const space = Math.max(20, neckX - 16);
+  return Math.max(inset, Math.min(neckX - Math.min(140, space * 0.95), barX - 40));
+}
+
+/** The page is already at its reading end. Approach from above the bar,
+ * finishing horizontally without crossing the photos or CTA. */
+export function barEntry(waiting: LightPoint, target: LightPoint): LightPath {
+  const handle = Math.abs(waiting.x - target.x);
+  const sign = waiting.x <= target.x ? -1 : 1;
+  const rise = Math.min(48, Math.max(24, handle), Math.max(0, target.y - waiting.y));
+  const corner = { x: waiting.x, y: target.y - rise };
+  const turn = byDistance(quintic(
+    corner,
+    { x: waiting.x, y: corner.y + rise / 3 },
+    { x: waiting.x, y: corner.y + rise * 2 / 3 },
+    { x: target.x + sign * handle * 2 / 3, y: target.y },
+    { x: target.x + sign * handle / 3, y: target.y },
+    target,
+  ));
+  const vertical = Math.max(0, corner.y - waiting.y);
+  const split = vertical / (vertical + pathLength(turn) || 1);
+  return byDistance(t => t < split
+    ? { x: waiting.x, y: mix(waiting.y, corner.y, t / split) }
+    : turn((t - split) / (1 - split || 1)));
+}
+
+/** Native scrolling owns a tall section. Begin at or after the bridge ends,
+ * and finish only when the real bar can be seen, with a horizontal tangent. */
+export function barApproach(
+  target: LightPoint,
+  waiting: LightPoint,
+  sectionStart: number,
+  height: number,
+  finishAt?: number,
+) {
+  const end = Math.max(sectionStart, target.y - height + 2, finishAt ?? -Infinity);
+  const start = Math.max(sectionStart, finishAt === undefined ? target.y - height - 100 : end - 102);
+  const from = { x: waiting.x, y: start + waiting.y };
+  const sign = waiting.x <= target.x ? -1 : 1;
+  const handle = Math.min(40, Math.abs(waiting.x - target.x) * 0.65);
+  const drop = Math.min(60, Math.max(0, target.y - from.y) / 3);
+  const path = byDistance(quintic(
+    from,
+    { x: from.x, y: from.y + drop },
+    { x: from.x, y: from.y + drop * 2 },
+    { x: target.x + sign * handle, y: target.y },
+    { x: target.x + sign * handle / 2, y: target.y },
+    target,
+  ));
+  return {
+    start,
+    end,
+    at: (y: number) => end === start ? target : path(clamp((y - start) / (end - start))),
+  };
+}
+
 export function glassRoute(
   body: LightPoint,
   neck: LightPoint,
@@ -58,16 +119,24 @@ export function glassRoute(
   reverse = false,
   receives = true,
   pageDistance = height - header,
+  waiting = { x: glassLane(neck.x, end.x, width), y: height - 84 },
+  mobile = width <= 760,
 ) {
-  const target = { x: end.x, y: end.y + pageDistance };
+  const lane = glassLane(neck.x, end.x, width, mobile);
+  const destination = receives ? end : waiting;
+  const target = { x: destination.x, y: destination.y + pageDistance };
   const space = Math.max(20, neck.x - 16);
-  const lane = Math.max(18, Math.min(neck.x - Math.min(140, space * 0.95), target.x - 40));
   const radius = (neck.x - lane) / 2;
   const rise = Math.min(radius, (neck.y - header - 30) * 0.35);
   const entryHandle = Math.max(0, Math.min(40, (target.x - lane) * 0.8));
+  const leadScale = Math.min(1, Math.max(0, target.y - neck.y - rise * 2.2) / 320);
   // One C2 spline owns the entire external gesture. Scroll phases only sample
   // it; there are no separate arch/lead/wave curves to flatten at their joins.
+  const stem = Math.max(0, body.y - neck.y);
   const controls = [
+    body,
+    { x: neck.x, y: body.y - stem / 3 },
+    { x: neck.x, y: neck.y + stem / 3 },
     neck,
     { x: neck.x, y: neck.y - rise * 0.3 },
     { x: neck.x - radius * 0.15, y: neck.y - rise * 0.65 },
@@ -77,15 +146,15 @@ export function glassRoute(
     { x: lane, y: neck.y - rise * 0.1 },
     { x: lane, y: neck.y + rise * 0.7 },
     { x: lane, y: neck.y + rise * 2.2 },
-    { x: lane, y: target.y - 240 },
-    { x: receives ? lane : target.x, y: target.y - 120 },
+    { x: lane, y: target.y - 240 * leadScale },
+    { x: receives ? lane : target.x, y: target.y - 120 * leadScale },
     ...(receives ? [
-      { x: lane, y: target.y - 60 },
+      { x: lane, y: target.y - 60 * leadScale },
       { x: target.x - entryHandle, y: target.y },
       { x: target.x - entryHandle / 2, y: target.y },
     ] : [
-      { x: target.x, y: target.y - 80 },
-      { x: target.x, y: target.y - 40 },
+      { x: target.x, y: target.y - 80 * leadScale },
+      { x: target.x, y: target.y - 40 * leadScale },
     ]),
     target,
   ];
@@ -104,13 +173,15 @@ export function glassRoute(
   const completed = receives ? 1 - Math.min(0.2, 60 / pathLength(base)) : 1;
   const waveAt = (t: number) => {
     const u = clamp((t - released) / (completed - released));
-    return Math.sin(2 * Math.PI * u) * Math.sin(Math.PI * u) ** 2;
+    return flowingWave(u);
   };
-  let amplitude = width <= 760 ? 24 : 32;
+  // The mobile gutter also has to fit the halo beside portraits, not just text.
+  const edge = mobile ? 10 : 24;
+  let amplitude = mobile ? 6.5 : 32;
   for (let i = 1; i < 512; i++) {
     const t = i / 512, p = base(t), wave = waveAt(t);
-    if (wave < 0) amplitude = Math.min(amplitude, (p.x - 12) / -wave);
-    if (wave > 0) amplitude = Math.min(amplitude, (width - 12 - p.x) / wave);
+    if (wave < 0) amplitude = Math.min(amplitude, (p.x - edge) / -wave);
+    if (wave > 0) amplitude = Math.min(amplitude, (width - edge - p.x) / wave);
   }
   const path = byDistance(t => {
     const p = base(t);
@@ -119,17 +190,17 @@ export function glassRoute(
   const departure = turnAt(path);
   const arrival = receives ? 1 - Math.min(0.2, 50 / pathLength(path)) : 1;
   const pieces = splitRoute(path, departure, arrival);
-  const stem = Math.max(0, body.y - neck.y);
-  const mouth = stem / (stem + pathLength(path) * departure);
-  const launch = (t: number) => t < mouth
-    ? { x: neck.x, y: mix(body.y, neck.y, t / mouth) }
-    : pieces.departure((t - mouth) / (1 - mouth));
+  let mouth = 0;
+  for (let i = 1; i <= 512; i++) {
+    const t = i / 512;
+    if (pieces.departure(t).y <= neck.y) { mouth = t; break; }
+  }
   return reverse ? {
     departure: (t: number) => pieces.entry(1 - t),
     flight: (t: number) => pieces.flight(1 - t),
-    entry: (t: number) => launch(1 - t),
+    entry: (t: number) => pieces.departure(1 - t),
     trailStart: mouth,
-  } : { ...pieces, departure: launch, trailStart: mouth };
+  } : { ...pieces, trailStart: mouth };
 }
 
 export function rightRoute(
@@ -141,6 +212,7 @@ export function rightRoute(
   reverse = false,
   receives = true,
   pageDistance = height - header,
+  mobile = width <= 760,
 ) {
   // Page coordinates: the target belongs to the next section. Using its
   // resting viewport Y made a downward trip turn upward in the middle.
@@ -148,8 +220,8 @@ export function rightRoute(
   const gap = Math.max(1, end.y - team.y);
   const outer = Math.max(team.x, pilot.x);
   const room = Math.max(4, width - 12 - outer);
-  const lane = outer + room * 0.58;
-  const drop = Math.max(24, Math.min(70, room * 0.8, gap * 0.2));
+  const lane = receives ? rightLane(team.x, pilot.x, width, mobile) : pilot.x;
+  const drop = Math.max(16, Math.min(46, Math.abs(lane - team.x) * 0.8, gap * 0.2));
   const rise = receives ? Math.min(64, gap * 0.2) : 0;
   const leaving = { x: lane, y: team.y + drop };
   const entering = { x: receives ? lane : end.x, y: end.y - rise };
@@ -171,10 +243,10 @@ export function rightRoute(
   }
   const split = Math.max(0.05, low);
   const departure = (t: number) => launch(t * split);
-  const amplitude = Math.min(24, room * 0.25);
+  const amplitude = mobile ? 6.5 : Math.min(26, room * 0.5);
   const wave = byDistance((t) => ({
     x: mix(leaving.x, entering.x, smoothPosition(t)) +
-      amplitude * Math.sin(2 * Math.PI * t) * Math.sin(Math.PI * t) ** 2,
+      amplitude * flowingWave(t),
     y: mix(leaving.y, entering.y, t),
   }));
   const bendLength = pathLength(launch) * (1 - split);
@@ -197,7 +269,18 @@ export function rightRoute(
   } : { departure, flight, entry };
 }
 
+export function rightLane(teamX: number, pilotX: number, width: number, mobile = width <= 760) {
+  return mobile ? width - 18 : Math.min(width - 32, Math.max(teamX, pilotX) + 44);
+}
+
 const smoothPosition = (t: number) => t * t * t * (10 + t * (-15 + 6 * t));
+
+/** Keep the wave present along the entire flight. Only the short endpoint
+ * blends taper it, preserving a vertical tangent and zero endpoint curvature. */
+function flowingWave(t: number) {
+  return Math.sin(2 * Math.PI * t) * smoothPosition(clamp(t / 0.055)) *
+    smoothPosition(clamp((1 - t) / 0.055));
+}
 
 /** One full, tapered sinusoid over the arc. The end position and tangent are
  * unchanged; fitting its amplitude avoids clipping or clamping the curve. */

@@ -446,7 +446,7 @@ export default function StarVoyageScene({
         previousReading = parked;
         const pixelsPerUnit =
           height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
-        const wakeLength = (narrow ? 100 : 150) / pixelsPerUnit;
+        const wakeLength = (narrow ? 120 : 180) / pixelsPerUnit;
         if (p >= finale.orbit || navigationVisibility === 0) {
           wake.clear();
         } else {

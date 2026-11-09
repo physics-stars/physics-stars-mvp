@@ -50,17 +50,21 @@ export function Landing() {
             <h2 id="overview-title">{copy.overview.title}</h2>
             <p>{copy.overview.body}</p>
           </div>
-          <div className={styles.overviewSteps}>
-            {copy.overview.steps.map((step, index) => (
-              <article key={step.title}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>{step.body}</p>
-                </div>
-              </article>
-            ))}
-            <aside>
+          <div className={styles.overviewMethod}>
+            <ol className={styles.overviewSteps} role="list">
+              {copy.overview.steps.map((step, index) => (
+                <li key={step.title}>
+                  <span aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <aside className={styles.teacherNote}>
               <h3>{copy.overview.teacherTitle}</h3>
               <p>{copy.overview.teacherBody}</p>
             </aside>
@@ -75,10 +79,15 @@ export function Landing() {
         >
           <div className={styles.aboutHeading}>
             <p className={styles.sectionLabel}>{t.nav.team}</p>
-            <h2 id="about-title">{copy.aboutTitle}</h2>
+            <h2 id="about-title">
+              {copy.aboutTitleLines.map((line, index) => (
+                <span key={line}>{index > 0 ? " " : ""}{line}</span>
+              ))}
+            </h2>
           </div>
           <div className={styles.aboutBody}>
             <p>{copy.aboutBody}</p>
+            <p>{copy.aboutSecond}</p>
           </div>
           <div
             className={styles.team}
@@ -92,7 +101,7 @@ export function Landing() {
                     src={member.photo}
                     alt={member.name}
                     fill
-                    sizes="(max-width:480px) calc(100vw - 48px),28vw"
+                    sizes="(max-width:760px) 29vw, 28vw"
                   />
                 </div>
                 <div className={styles.teamCaption}>
@@ -123,6 +132,7 @@ export function Landing() {
               <p>{copy.pilotBody}</p>
             </div>
             <div className={styles.pilotAction}>
+              <p className={styles.pilotNote}>{copy.pilotNote}</p>
               <a
                 className={styles.primaryButton}
                 href={contact}
@@ -149,6 +159,7 @@ export function Landing() {
               <a
                 href={`/?lang=${locale}`}
                 aria-label="Physics Stars"
+                translate="no"
                 className={styles.footerBrand}
               >
                 <Image src="/logo-on-light.svg" width={30} height={30} alt="" />
@@ -161,6 +172,10 @@ export function Landing() {
             <div className={styles.footerNotes}>
               <p>{t.footer.rights}</p>
             </div>
+            <a href={contact}>
+              {t.footer.contact}
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </a>
           </footer>
         </section>
       </LandingDescent>

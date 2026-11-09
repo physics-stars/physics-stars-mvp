@@ -1,0 +1,64 @@
+.field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.star {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  background: #e6eeff;
+  box-shadow: 0 0 3px #dce6ff30;
+}
+.glint {
+  width: 2px;
+  height: 2px;
+  background: #f4f5ff;
+  box-shadow: 0 0 3px #f4f5ff90, 0 0 8px #c4b3ec38;
+  animation: stellarGlow var(--twinkle-period) ease-in-out var(--twinkle-delay) infinite;
+}
+.glint::before,
+.glint::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  opacity: 0.12;
+  transform: translate(-50%, -50%) scale(0.55);
+  animation: stellarGlint var(--twinkle-period) ease-in-out var(--twinkle-delay) infinite;
+}
+.glint::before {
+  width: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #edf0ffc9 48%, #edf0ffc9 52%, transparent);
+}
+.glint::after {
+  width: 1px;
+  height: 12px;
+  background: linear-gradient(transparent, #edf0ffb3 48%, #edf0ffb3 52%, transparent);
+}
+@keyframes stellarGlow {
+  0%, 36%, 56%, 100% { opacity: 0.48; }
+  46% { opacity: 0.95; }
+}
+@keyframes stellarGlint {
+  0%, 36%, 56%, 100% {
+    opacity: 0.12;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+  46% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@media (max-width: 760px) {
+  .star:not(.glint):nth-child(2n) { display: none; }
+  .glint:nth-last-child(-n + 2) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glint { animation: none; opacity: 0.5; }
+  .glint::before,
+  .glint::after { animation: none; opacity: 0.12; }
+}

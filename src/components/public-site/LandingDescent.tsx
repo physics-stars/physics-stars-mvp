@@ -11,12 +11,9 @@ import { createPortal } from "react-dom";
 import {
   clamp,
   ease,
-  flightPath,
   mix,
-  glassRoute,
-  rightRoute,
-  byDistance,
-  quintic,
+  glassLane,
+  rightLane,
   type LightPath,
   type LightPoint,
   type LightSide,
@@ -25,19 +22,20 @@ import styles from "./landing.module.css";
 import { vesselBodyPath } from "./GlassVessel";
 import { sectionTransition } from "./section-magnet";
 import {
-  bridgeFrame,
-  bridgeLength,
-  bridgeStop,
+  bridgeFrame as legacyBridgeFrame,
+  bridgeLength as legacyBridgeLength,
   type ScrollBridge,
 } from "./descent-scroll";
 import { CurveTrail, type TrailCursor } from "./curve-trail";
 import { ScrollGesture } from "./scroll-gesture";
+import { followScroll, scrollTarget } from "./descent-controller";
+import { landingTrajectory, type LandingTrajectory } from "./landing-trajectory";
 
 type Index = 0 | 1 | 2;
 type BarIndex = 1 | 2;
 const subscribeClient = () => () => {};
-/** Scroll controls the light and the section magnet. Visible bar effects and
- * the flask's reading flash briefly own the scroll; offscreen targets wait. */
+/** A single animation frame controls the light, reading scroll and magnet.
+ * Team arrival permits downward reading up to its section boundary. */
 export function LandingDescent({ children }: { children: ReactNode }) {
   const clientReady = useSyncExternalStore(
     subscribeClient,
@@ -77,8 +75,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     if (sections.length !== 3 || !vessel || bars.length !== 2) return;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0,
-      settleTimer = 0,
-      magnetFrame = 0;
+      settleTimer = 0;
     let touching = false,
       animated = false,
       docked = false;
@@ -89,7 +86,6 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     const curveTrail = new CurveTrail();
     const gesture = new ScrollGesture();
     let trailCursor: TrailCursor | null = null;
-    const approaches = new Map<string, { start: number; end: number; at: LightPath }>();
     const powers = [0, 0, 0];
     const barStates = [
       { power: 0, departure: 0, side: "left" as LightSide },
@@ -98,45 +94,50 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     type Bridge = ScrollBridge & {
       index: number;
       offset: number;
+      requested: number;
       side: LightSide;
       departure: LightPath;
       flight: LightPath;
       arrival: LightPath;
       pageCoordinates: boolean;
       trailStart: number;
+      journey?: LandingTrajectory;
+      velocity: number;
+      reading: boolean;
+      trailOrigin?: number;
+      receptionProgress?: number;
     };
-    const routes = new Map<number, Omit<Bridge, "offset">>();
+    const routes = new Map<string, Omit<Bridge, "offset" | "requested" | "origin" | "velocity" | "reading">>();
     let active: Bridge | null = null;
     let previousY = scrollY,
       scrollDirection = 1;
-    let magnet: {
-      from: number;
-      to: number;
-      started: number;
-      bridge: Bridge;
-      duration: number;
-    } | null = null;
+    let magnet = false;
+    let snapMotion: { from: number; started: number; to: number; duration: number } | null = null;
+    let pageMotion: { index: Index; actual: number; requested: number; direction: number } | null = null;
+    let lastFrameTime = 0;
+    let lastInputAt = -Infinity, lastInputDirection = 0;
+    let stoppedAt = -Infinity, stoppedDirection = 0;
     let barMotion: {
       index: BarIndex;
       from: number;
       to: number;
       started: number;
-      top: number;
       side: LightSide;
     } | null = null;
     let flaskReady = false;
-    let flaskFlash: { started: number; top: number } | null = null;
+    let flaskFlash: { started: number } | null = null;
     let flashStrength = 0;
     function geometry() {
-      const w = innerWidth,
+      const w = document.documentElement.clientWidth,
         h = innerHeight,
-        header = w <= 760 ? 68 : 76;
+        mobile = innerWidth <= 760,
+        header = mobile ? 68 : 76;
       const bounds = sections.map((el) => el.getBoundingClientRect());
       const starts = bounds.map((r) => r.top + scrollY - header);
       const ends = bounds.map((r, i) =>
         Math.max(starts[i], r.bottom + scrollY - h),
       );
-      return { w, h, header, bounds, starts, ends };
+      return { w, h, header, mobile, bounds, starts, ends };
     }
     function port(index: Index, side: LightSide, atY = scrollY) {
       const { h, header } = geometry(),
@@ -157,6 +158,25 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       const neck = { x: p.x, y: r.top + (r.height * 43) / 290 + shift };
       const visible = p.y >= header + 18 && p.y <= h - (index === 0 ? 22 : 2);
       return { p, neck, visible };
+    }
+    function waitingPoint(index: BarIndex, side: LightSide, atY = geometry().ends[index]) {
+      const g = geometry();
+      const target = port(index, side, atY).p;
+      const x = index === 1 && side === "left"
+        ? glassLane(port(0, "left").neck.x, target.x, g.w, g.mobile)
+        : side === "left" ? (g.mobile ? 18 : 34)
+          : rightLane(port(1, "right").p.x, port(2, "right").p.x, g.w, g.mobile);
+      const rise = Math.min(48, Math.max(24, Math.abs(x - target.x)));
+      return {
+        x,
+        y: Math.max(g.header + 14, target.y - rise),
+      };
+    }
+    function arrivalAt(index: BarIndex) {
+      const g = geometry();
+      if (index === 2) return g.ends[index];
+      const target = port(index, "left").p;
+      return Math.max(g.starts[index], Math.min(g.ends[index], target.y + scrollY - g.h + 120));
     }
     function paintPower(
       index: Index,
@@ -191,53 +211,67 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       const bottom = voyage!.getBoundingClientRect().bottom + scrollY;
       return [{ top: bottom - g.h + g.header, bottom }, ...lower];
     }
-    function bridge(index: number, origin: 0 | 1 = scrollDirection < 0 ? 1 : 0): Bridge {
-      let route = routes.get(index);
+    function bridge(index: number, origin: 0 | 1 = scrollDirection < 0 ? 1 : 0, receptionAt?: number): Bridge {
+      const routeKey = `${index}:${receptionAt ?? "arrival"}`;
+      let route = routes.get(routeKey);
       if (!route) {
         const g = geometry();
         const from = index - 1;
         const to = index as Index;
         const side: LightSide = to < 2 ? "left" : "right";
         const start = from < 0 ? pageSections()[0].bottom - g.h : g.ends[from];
-        const end = g.starts[to];
-        const waiting = { x: side === "left" ? 34 : g.w - 34, y: g.h - 84 };
+        const end = to > 0 ? receptionAt ?? arrivalAt(to as BarIndex) : g.starts[to];
         const source = from < 0 ? null : port(from as Index, side, start);
         const target = port(to, side, end);
+        const waiting = to > 0 ? waitingPoint(to as BarIndex, side, end) : target.p;
         const a = source?.visible ? source.p : waiting;
-        const b = target.visible ? target.p : waiting;
-        let parts: { departure: LightPath; flight: LightPath; entry: LightPath; trailStart?: number };
-        if (to === 0)
-          parts = { departure: () => target.p, flight: () => target.p, entry: () => target.p };
-        else if (to === 1 && source?.visible)
-          parts = glassRoute(source.p, source.neck, b, g.w, g.h, g.header, false, target.visible, end - start);
-        else if (to === 2)
-          parts = rightRoute(a, b, g.w, g.h, g.header, false, target.visible, end - start);
-        else {
-          const path = flightPath(a, b, side, g.w, g.header, 140);
-          parts = {
-            departure: (q: number) => path(q * 0.16),
-            flight: (q: number) => path(0.16 + q * 0.68),
-            entry: (q: number) => path(0.84 + q * 0.16),
-          };
-        }
+        const journey = to > 0
+          ? landingTrajectory(a, source?.neck ?? a, target.p, g.w, g.h, g.header, side, end - start)
+          : undefined;
         route = {
           index,
           start,
           end,
           side,
           exit: source?.visible ? 140 : 0,
-          entry: to > 0 && target.visible ? 100 : 0,
-          departure: parts.departure,
-          flight: parts.flight,
-          arrival: parts.entry,
+          entry: 0,
+          departure: () => target.p,
+          flight: () => target.p,
+          arrival: () => target.p,
           pageCoordinates: to === 2 || (to === 1 && !!source?.visible),
-          trailStart: (parts.trailStart ?? 0) * (source?.visible ? 140 : 0),
+          trailStart: journey?.trailStart ?? 0,
+          journey,
+          receptionProgress: receptionAt === undefined || to === 0 ? undefined
+            : clamp((receptionAt - arrivalAt(to as BarIndex)) / Math.max(1, g.ends[to] - arrivalAt(to as BarIndex))),
         };
-        routes.set(index, route);
+        routes.set(routeKey, route);
       }
-      return { ...route, offset: 0, origin };
+      return { ...route, offset: 0, requested: 0, origin, velocity: 0, reading: origin === 1 };
+    }
+    function bridgeLength(current: Bridge) {
+      return current.journey?.length ?? legacyBridgeLength(current);
+    }
+    function bridgeFrame(current: Bridge, offset: number) {
+      if (!current.journey) return legacyBridgeFrame(current, offset);
+      const state = current.journey.at(offset);
+      return { y: current.start + state.camera, phase: state.phase, amount: state.amount };
+    }
+    function offsetAtPage(current: Bridge, y: number) {
+      return current.journey?.distanceAtPage(y - current.start) ?? current.exit + y - current.start;
+    }
+    function landingOffset(current: Bridge) {
+      const start = geometry().starts[current.index];
+      return current.journey && current.end > start + 2
+        ? offsetAtPage(current, start) : bridgeLength(current);
     }
     function bridgePoint(current: Bridge, offset: number) {
+      if (current.journey) {
+        const p = current.journey.at(offset).point;
+        const currentFrame = bridgeFrame(current, current.offset);
+        const camera = current.index === 1 && currentFrame.phase === "entry" && scrollY > currentFrame.y + 1
+          ? scrollY : currentFrame.y;
+        return { x: p.x, y: p.y + current.start - camera };
+      }
       const state = bridgeFrame(current, offset);
       const p = state.phase === "departure"
         ? current.departure(state.amount)
@@ -250,7 +284,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       if (current.index === 0) {
         const vesselPort = port(0, "left");
         point = vesselPort.p;
-        alpha = vesselPort.visible ? 1 : 0;
+        // The viewport clip reveals the light with the glass. A visibility
+        // threshold here makes it pop in after entering the screen.
+        alpha = 1;
         docked = true;
         paintPower(0, 1, "left");
         container.dataset.lightPhase = "contained";
@@ -263,10 +299,11 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       trailCursor = current.offset < current.trailStart ? null : {
         key: `bridge:${current.index}`,
         value: current.offset,
-        origin: current.origin === 1 ? length : current.trailStart,
+        origin: current.trailOrigin ?? (current.origin === 1 ? length : current.trailStart),
         min: current.trailStart,
         max: length,
         at: (offset) => bridgePoint(current, offset),
+        hold: true,
       };
       alpha = 1;
       docked = false;
@@ -274,82 +311,82 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         paintPower(0, state.phase === "departure" ? 1 - ease(state.amount) : 0, "left");
       container.dataset.lightPhase = state.phase;
       container.dataset.lightProgress = (current.offset / bridgeLength(current)).toFixed(4);
+      container.dataset.lightDistance = current.offset.toFixed(3);
+      container.dataset.lightVelocity = current.velocity.toFixed(4);
+      container.dataset.cruiseSpeed = (current.journey?.speed ?? 0).toFixed(4);
+      container.dataset.lightRoute = String(current.index);
+      container.dataset.lightRequested = current.requested.toFixed(3);
+      container.dataset.lightLength = bridgeLength(current).toFixed(3);
+      container.dataset.lightCamera = bridgeFrame(current, current.offset).y.toFixed(3);
       return Math.max(0, state.phase === "departure" ? current.index - 1 : current.index) as Index;
     }
     function readingLight(index: Index) {
-      const g = geometry();
       if (index === 0) {
-        const vesselPort = port(0, "left");
-        point = vesselPort.p;
+        const target = port(0, "left");
+        point = target.p;
         docked = true;
-        alpha = vesselPort.visible ? 1 : 0;
+        alpha = 1;
         paintPower(0, 1, "left");
         container.dataset.lightPhase = "contained";
         delete container.dataset.lightProgress;
         return;
       }
-      const bar = index > 0 ? barStates[index - 1] : null;
-      const side = bar?.side ?? "left";
-      const target = port(index, side);
-      const waiting = { x: side === "left" ? 34 : g.w - 34, y: g.h - 84 };
-      const key = `reading:${index}:${side}`;
-      let approach = approaches.get(key);
-      if (!approach) {
-        const endPoint = { x: target.p.x, y: target.p.y + scrollY };
-        const start = endPoint.y - g.h - 100;
-        // Finish when the bar itself is visible, without reserving an extra
-        // halo-sized strip that can leave a slightly taller mobile slide stuck.
-        const end = start + 102;
-        const startPoint = { x: waiting.x, y: start + waiting.y };
-        const sign = side === "left" ? -1 : 1;
-        const handle = Math.min(40, Math.abs(waiting.x - endPoint.x) * 0.65);
-        const path = byDistance(quintic(
-          startPoint,
-          { x: startPoint.x, y: startPoint.y + 60 },
-          { x: startPoint.x, y: startPoint.y + 120 },
-          { x: endPoint.x + sign * handle, y: endPoint.y },
-          { x: endPoint.x + sign * handle / 2, y: endPoint.y },
-          endPoint,
-        ));
-        approach = { start, end, at: (y) => path(clamp((y - start) / (end - start))) };
-        approaches.set(key, approach);
+      const bar = barStates[index - 1];
+      const target = port(index, bar.side);
+      if (bar.power === 1 || bar.departure > 0) {
+        point = target.p;
+        docked = bar.power === 1;
+        alpha = docked ? 0 : 1;
+        paintPower(index, bar.power, bar.side);
+        container.dataset.lightPhase = docked ? "contained" : "departure";
+        return;
       }
-      const p = approach.at(scrollY);
-      point = scrollY < approach.start ? waiting : { x: p.x, y: p.y - scrollY };
-      if (scrollY > approach.start && scrollY < approach.end) {
-        const current = approach;
-        trailCursor = {
-          key, value: scrollY,
-          origin: scrollDirection > 0 ? current.start : current.end,
-          min: current.start, max: current.end,
-          at: (y) => {
-            const value = current.at(y);
-            return { x: value.x, y: value.y - scrollY };
-          },
-        };
+      const current = bridge(index);
+      current.offset = offsetAtPage(current, scrollY);
+      current.requested = current.offset;
+      current.trailOrigin = current.offset;
+      current.reading = true;
+      if (!barMotion && scrollY >= current.end - 1) {
+        current.offset = current.journey!.flightEnd;
+        current.requested = bridgeLength(current);
+        active = current;
+        schedule();
       }
-      if (bar && !bar.departure && target.visible && bar.power < 1)
-        beginBar(index as BarIndex, 1);
-      docked = bar?.power === 1;
-      if (docked) point = target.p;
-      alpha = docked ? 0 : 1;
-      paintPower(index, bar?.power ?? 0, side);
-      container.dataset.lightPhase = docked ? "contained" : "approach";
-      delete container.dataset.lightProgress;
+      drawBridge(current);
+    }
+    function holdGesture(direction: number) {
+      stoppedAt = performance.now();
+      stoppedDirection = direction;
+    }
+    function beginEntry(index: BarIndex, reverse = false) {
+      const state = barStates[index - 1];
+      if (!animated || barMotion || !port(index, state.side).visible) return;
+      if (!reverse && scrollY < arrivalAt(index) - 1) return;
+      const current = bridge(index, reverse ? 1 : 0,
+        reverse ? Math.max(scrollY, arrivalAt(index)) : undefined);
+      current.offset = reverse ? bridgeLength(current) : current.journey!.flightEnd;
+      current.requested = reverse ? current.journey!.flightEnd : bridgeLength(current);
+      current.trailOrigin = current.offset;
+      current.reading = true;
+      active = current;
+      schedule();
     }
     function beginBar(index: BarIndex, to: number, direction = 0) {
       const state = barStates[index - 1];
       const side = to ? state.side : index === 1 && direction < 0 ? "left" : "right";
+      if (to === 1 && scrollY < arrivalAt(index) - 1) return;
       if (barMotion || !animated || !port(index, side).visible || state.power === to) return;
       stopMagnet();
-      if (!to) state.departure = direction;
+      if (!to) {
+        state.departure = direction;
+        pageMotion = null;
+      }
       state.side = side;
       barMotion = {
         index,
         from: state.power,
         to,
         started: performance.now(),
-        top: scrollY,
         side,
       };
       container.dataset.motionBusy = "true";
@@ -375,13 +412,14 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       alpha = motion.to ? 1 - ease(q) : ease(q);
       docked = false;
       container.dataset.lightPhase = motion.to ? "charge" : "discharge";
-      if (Math.abs(scrollY - motion.top) > 0.5)
-        window.scrollTo({ top: motion.top, behavior: "instant" });
       if (q >= 1) {
         barStates[motion.index - 1].power = motion.to;
         barMotion = null;
         container.dataset.motionBusy = "false";
         delete container.dataset.barAnimation;
+        if (motion.to) holdGesture(1);
+        else if (barStates[motion.index - 1].departure < 0)
+          beginEntry(motion.index, true);
         queueSettle();
       }
       schedule();
@@ -392,8 +430,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       stopMagnet();
       active = null;
       flaskReady = true;
-      flaskFlash = { started: performance.now(), top: geometry().ends[0] };
-      window.scrollTo({ top: flaskFlash.top, behavior: "instant" });
+      flaskFlash = { started: performance.now() };
       container.dataset.motionBusy = "true";
       container.dataset.flaskFlash = "true";
       schedule();
@@ -409,6 +446,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         flashStrength = 0;
         container.dataset.motionBusy = "false";
         delete container.dataset.flaskFlash;
+        holdGesture(1);
         queueSettle();
         schedule();
         return;
@@ -420,20 +458,18 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       flashStrength = Math.sin(Math.PI * q) ** 2;
       paintPower(0, 1, "left");
       container.dataset.lightPhase = "flash";
-      if (Math.abs(scrollY - motion.top) > 0.5)
-        window.scrollTo({ top: motion.top, behavior: "instant" });
       schedule();
     }
     function render(time: number) {
       frame = 0;
       trailCursor = null;
+      advance(time);
       const g = geometry(),
         rootBounds = container.getBoundingClientRect();
-      const team = panel.getBoundingClientRect();
       if (!flaskFlash && scrollY < g.ends[0] - 48) flaskReady = false;
       container.style.setProperty("--team-top", `${g.bounds[1].top - rootBounds.top}px`);
       container.style.setProperty("--team-height", `${g.bounds[1].height}px`);
-      panel.style.setProperty("--panel-light-y", `${team.height}px`);
+      panel.style.setProperty("--panel-light-y", "0px");
       let owner: Index = 0;
       if (!animated) {
         powers.forEach((_, i) => paintPower(i as Index, 1, "left"));
@@ -445,7 +481,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         if (active) owner = drawBridge(active);
         else if (transition) {
           const current = bridge(transition.index);
-          current.offset = current.exit + scrollY - current.start;
+          current.offset = offsetAtPage(current, scrollY);
           owner = drawBridge(current);
         } else {
           owner = g.starts.reduce<Index>((found, start, i) => scrollY >= start - 1 ? i as Index : found, 0);
@@ -479,6 +515,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       );
       star.current!.style.filter = "";
       aura.current!.style.opacity = String(0.65 + flashStrength * 0.35);
+      aura.current!.setAttribute("r", g.mobile && !flaskFlash ? "8" : "32");
       flashAura.current!.style.opacity = String(flashStrength * 0.8);
       star.current!.style.opacity = String(shown);
       const trace = curveTrail.update(shown > 0.05 && !docked ? trailCursor : null, time);
@@ -495,26 +532,22 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       container.dataset.lightY = point.y.toFixed(2);
       container.dataset.lightOwner = String(owner);
       container.dataset.lightDocked = String(docked);
-      if (trace.opacity > 0) schedule();
+      if (trace.opacity > 0 && !(trailCursor as TrailCursor | null)?.hold) schedule();
     }
     function schedule() {
       if (!frame) frame = requestAnimationFrame(render);
     }
     function stopMagnet() {
-      cancelAnimationFrame(magnetFrame);
       clearTimeout(settleTimer);
-      magnetFrame = 0;
-      magnet = null;
+      magnet = false;
+      snapMotion = null;
       delete container.dataset.magnetTarget;
-    }
-    function applyOffset(current: Bridge, offset: number) {
-      current.offset = clamp(offset / bridgeLength(current)) * bridgeLength(current);
-      window.scrollTo({ top: bridgeFrame(current, current.offset).y, behavior: "instant" });
-      schedule();
     }
     function finishBridge(current: Bridge, end: boolean) {
       const owner = end ? current.index : current.index - 1;
       active = null;
+      stopMagnet();
+      holdGesture(end ? 1 : -1);
       if (current.index === 0 && !end)
         window.dispatchEvent(new Event("landing-logo-return"));
       if (owner === 0) {
@@ -529,189 +562,235 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       }
       schedule();
     }
-    function attract(time: number) {
-      magnetFrame = 0;
-      const current = magnet;
-      if (!current) return;
-      const q = clamp((time - current.started) / current.duration);
-      applyOffset(current.bridge, mix(current.from, current.to, ease(q)));
-      if (q < 1 && Math.abs(current.bridge.offset - current.to) > 0.5)
-        magnetFrame = requestAnimationFrame(attract);
-      else {
-        applyOffset(current.bridge, current.to);
-        magnet = null;
-        delete container.dataset.magnetTarget;
-        finishBridge(current.bridge, current.to > 0);
+    /** This is the only scroll writer during controlled motion. Events only
+     * change requests; reaching a stop drops all excess input. */
+    function advance(time: number) {
+      const elapsed = lastFrameTime ? time - lastFrameTime : 16;
+      lastFrameTime = time;
+      if (!animated) return;
+      if (active) {
+        const current = active;
+        if (snapMotion) {
+          const u = clamp((time - snapMotion.started) / snapMotion.duration);
+          const q = u ** 3 * (10 + u * (-15 + 6 * u));
+          current.offset = mix(snapMotion.from, snapMotion.to, q);
+          current.velocity = 0;
+        } else {
+          const before = current.offset;
+          current.offset = followScroll(current.offset, current.requested, elapsed);
+          current.velocity = (current.offset - before) / Math.max(1, elapsed);
+        }
+        const state = bridgeFrame(current, current.offset);
+        const arriving = state.phase === "entry" &&
+          (current.requested > current.offset + 0.001 || current.velocity > 0);
+        if (arriving) current.requested = bridgeLength(current);
+        let top = state.y;
+        // Once the team entry starts its camera is at the receiver. Reading
+        // may continue downward inside this section while the light arrives.
+        if (state.phase === "entry" && current.origin === 0 && current.index === 1) {
+          top = Math.max(top, scrollY);
+          if (pageMotion) {
+            pageMotion.actual = followScroll(pageMotion.actual, pageMotion.requested, elapsed);
+            top = Math.max(top, pageMotion.actual);
+            if (pageMotion.actual === pageMotion.requested) pageMotion = null;
+          }
+        }
+        window.scrollTo({ top, behavior: "instant" });
+        container.dataset.motionBusy = String(arriving);
+        if (current.offset === current.requested &&
+            (current.offset === 0 || current.offset === bridgeLength(current))) {
+          container.dataset.motionBusy = "false";
+          finishBridge(current, current.offset > 0);
+        } else if (current.offset !== current.requested) schedule();
+      } else if (pageMotion) {
+        const motion = pageMotion;
+        motion.actual = followScroll(motion.actual, motion.requested, elapsed);
+        window.scrollTo({ top: motion.actual, behavior: "instant" });
+        if (motion.actual === motion.requested) {
+          pageMotion = null;
+          const g = geometry();
+          if (motion.direction > 0 && motion.requested >= g.ends[motion.index] - 1) {
+            holdGesture(1);
+            if (motion.index === 0) beginFlaskFlash();
+          } else if (motion.direction < 0 && motion.requested <= g.starts[motion.index] + 1)
+            holdGesture(-1);
+        } else schedule();
       }
     }
     function settle() {
       clearTimeout(settleTimer);
-      if (
-        magnet || touching || barMotion || flaskFlash || media.matches ||
-        voyage?.dataset.voyageCue || voyage?.dataset.voyageNavigation ||
-        voyage?.dataset.landingJump
-      ) return;
-      if (voyage?.dataset.voyageComplete !== "true" && voyage?.dataset.voyageSkip !== "true") return;
-      if (!active) {
-        const g = geometry();
-        const transition = sectionTransition(scrollY, pageSections(), g.h, g.header);
-        if (!transition) {
-          // A discharge can outlast the gesture that started it. If the light
-          // is still at its visible bar, let it re-enter without another event.
-          barStates.forEach((state, i) => {
-            const index = (i + 1) as BarIndex;
-            const target = port(index, state.side);
-            if (state.departure && state.power === 0 && target.visible &&
-                Math.hypot(point.x - target.p.x, point.y - target.p.y) < 18) {
-              state.departure = 0;
-              beginBar(index, 1);
-            }
-          });
-          return;
-        }
-        active = bridge(transition.index);
-        active.offset = active.exit + scrollY - active.start;
-      }
-      const to = bridgeStop(active, active.offset, scrollY);
-      if (Math.abs(to - active.offset) < 0.01) {
-        finishBridge(active, to > 0);
+      if (touching || barMotion || flaskFlash || media.matches ||
+          voyage?.dataset.voyageCue || voyage?.dataset.voyageNavigation ||
+          voyage?.dataset.landingJump) return;
+      const quietFor = performance.now() - lastInputAt;
+      if (quietFor < 420) {
+        clearTimeout(settleTimer);
+        settleTimer = window.setTimeout(settle, 420 - quietFor);
         return;
       }
-      magnet = { from: active.offset, to, started: performance.now(), bridge: active,
-        duration: Math.abs(to - active.offset) < 36 ? 270 : 360 };
-      container.dataset.magnetTarget = String(to ? active.end : active.start);
-      magnetFrame = requestAnimationFrame(attract);
+      if (active && Math.abs(active.requested - active.offset) > 0.1) {
+        settleTimer = window.setTimeout(settle, 80);
+        return;
+      }
+      if (voyage?.dataset.voyageComplete !== "true" && voyage?.dataset.voyageSkip !== "true") return;
+      const g = geometry();
+      // The logo's hint moves native scroll without consuming input. Recover
+      // only its flight coordinate, then let this same RAF supply gravity.
+      if (!active) {
+        const transition = sectionTransition(scrollY, pageSections(), g.h, g.header);
+        if (!transition) return;
+        active = bridge(transition.index);
+        active.offset = offsetAtPage(active, scrollY);
+        active.requested = active.offset;
+      }
+      const landing = g.starts[active.index];
+      // Reading inside a tall section never attracts the camera to its end.
+      if (active.journey && scrollY >= landing - 1) return;
+      const middle = (active.start + landing) / 2;
+      const acceptedY = bridgeFrame(active, active.requested).y;
+      const after = acceptedY > middle + 0.5 ||
+        (Math.abs(acceptedY - middle) <= 0.5 && active.origin === 1);
+      active.requested = after ? landingOffset(active) : 0;
+      snapMotion = { from: active.offset, to: active.requested, started: performance.now(), duration: active.index === 0 ? 1000 : 1200 };
+      magnet = true;
+      container.dataset.magnetTarget = String(after ? landing : active.start);
+      schedule();
     }
     function queueSettle() {
       clearTimeout(settleTimer);
       if (!magnet && !touching && !voyage?.dataset.voyageCue)
-        settleTimer = window.setTimeout(settle, 180);
+        settleTimer = window.setTimeout(settle, 420);
     }
     function scroll() {
       scrollDirection = Math.sign(scrollY - previousY) || scrollDirection;
       previousY = scrollY;
-      if (active && !magnet && !barMotion) {
-        const expected = bridgeFrame(active, active.offset).y;
-        if (Math.abs(scrollY - expected) > 2) {
-          if (scrollY >= active.start - 1 && scrollY <= active.end + 1)
-            active.offset = active.exit + scrollY - active.start;
-          else active = null;
-        }
-      }
+      // A scroll coordinate cannot reconstruct departure/entry progress:
+      // those phases intentionally keep the camera stationary.
       schedule();
-      if (!magnet) queueSettle();
     }
     function discard(event: Event) {
       if (event.cancelable) event.preventDefault();
       event.stopImmediatePropagation();
     }
-    function moveBridge(delta: number) {
+    function moveBridge(delta: number, deliberate = true) {
+      if (!active) return;
       const current = active;
-      if (!current) return;
-      const before = current.offset;
-      applyOffset(current, before + delta);
-      const overflow = delta - (current.offset - before);
-      if (current.offset <= 0 || current.offset >= bridgeLength(current)) {
-        finishBridge(current, current.offset > 0);
-        if (!(current.index === 0 && current.offset === 0) &&
-            !barMotion && !flaskFlash && Math.abs(overflow) > 0.01)
-          window.scrollTo({ top: scrollY + overflow, behavior: "instant" });
+      if (Math.sign(delta) !== Math.sign(current.requested - current.offset)) {
+        current.requested = current.offset;
+        if (Math.sign(delta) !== Math.sign(current.velocity)) current.velocity = 0;
       }
+      const landing = landingOffset(current);
+      if (delta > 0 && !current.reading && deliberate && current.requested >= landing - 0.5 &&
+          scrollY >= geometry().starts[current.index] - 140) current.reading = true;
+      if (delta < 0) current.reading = true;
+      const limit = current.reading ? bridgeLength(current) : landing;
+      current.requested = scrollTarget(current.requested, delta, 0, limit);
+      schedule();
       queueSettle();
-      if (active && gesture.settling(performance.now())) {
-        const to = bridgeStop(active, active.offset, scrollY);
-        if (Math.abs(to - active.offset) < 28 && Math.sign(to - active.offset) === Math.sign(delta))
-          settle();
-      }
+    }
+    function requestReading(index: Index, delta: number) {
+      const g = geometry(), direction = Math.sign(delta);
+      if (pageMotion && direction !== pageMotion.direction) pageMotion = null;
+      const base = pageMotion?.requested ?? scrollY;
+      pageMotion = {
+        index, direction, actual: pageMotion?.actual ?? scrollY,
+        requested: scrollTarget(base, delta, g.starts[index], g.ends[index]),
+      };
+      schedule();
     }
     function consume(delta: number, event: Event) {
-      if (!delta) return;
-      const deliberate = gesture.read(delta, performance.now(),
-        freshInput || (event instanceof KeyboardEvent && !event.repeat) ? true : undefined);
+      if (!delta || !animated || voyage?.dataset.voyageCue || voyage?.dataset.landingJump ||
+          voyage?.dataset.voyageNavigation) return;
+      const now = performance.now(), direction = Math.sign(delta);
+      const fresh = freshInput || (event instanceof KeyboardEvent && !event.repeat) ||
+        now - lastInputAt > 180 || direction !== lastInputDirection;
+      const deliberate = gesture.read(delta, now, fresh ? true : undefined);
       freshInput = false;
-      // The intro owns its one-off hint nudge and lets a fresh gesture cancel
-      // it before native scrolling. Its return uses this same section magnet.
-      if (voyage?.dataset.voyageCue) return;
-      if (magnet && !deliberate && Math.abs(delta) <= 3 &&
-          Math.sign(delta) === Math.sign(magnet.to - magnet.bridge.offset)) {
-        discard(event);
-        return;
-      }
-      stopMagnet();
-      if (barMotion || flaskFlash) {
-        discard(event);
-        return;
-      }
-      if (!animated) return;
-      // Always leave an idle check, including input that cannot move the page.
-      queueSettle();
-      const direction = Math.sign(delta);
-      barStates.forEach((state) => {
-        if (state.departure && state.departure !== direction) state.departure = 0;
-      });
-      if (active) {
-        discard(event);
-        moveBridge(delta);
-        return;
-      }
+      lastInputAt = now;
+      lastInputDirection = direction;
       const g = geometry();
       const owner = g.starts.findLastIndex((start) => scrollY >= start - 1);
-      if (owner === 0 && flaskReady && !deliberate && scrollY >= g.ends[0] - 1) {
-        discard(event);
+      const transition = sectionTransition(scrollY, pageSections(), g.h, g.header);
+      if (!active && !transition && owner < 0) return;
+      discard(event);
+      if (barMotion || flaskFlash) {
+        // The photos may continue moving upward while their light arrives.
+        // Only downward reading inside the team section is accepted.
+        const teamArrival = barMotion?.index === 1 && barMotion.to === 1;
+        if (teamArrival && delta > 0) requestReading(1, delta);
         return;
       }
-      if (owner > 0) {
-        const state = barStates[owner - 1];
-        if (!deliberate && Math.abs(delta) <= 3 && state.power === 1 &&
-            port(owner as BarIndex, state.side).visible) {
-          discard(event);
+      // Inertia cannot turn an arrival into another departure. A continued
+      // deliberate gesture can resume after the short reading pause.
+      if (!fresh && direction === stoppedDirection &&
+          (now - stoppedAt < 350 || !deliberate)) return;
+      stoppedDirection = 0;
+      stopMagnet();
+      if (active) {
+        const state = bridgeFrame(active, active.offset);
+        if (state.phase === "entry" &&
+            (active.requested > active.offset + 0.001 || active.velocity > 0)) {
+          if (active.index === 1 && delta > 0) requestReading(1, delta);
           return;
         }
-        if (state.power > 0 && !state.departure &&
-            (delta < 0 || (owner < sections.length - 1 && scrollY + delta > g.ends[owner])))
-          beginBar(owner as BarIndex, 0, direction);
-        if (barMotion) {
-          discard(event);
-          return;
-        }
+        moveBridge(delta, deliberate);
+        return;
       }
-      const transition = sectionTransition(scrollY, pageSections(), g.h, g.header);
       if (transition) {
-        if (transition.index === 1 && delta > 0 && !flaskReady) {
-          window.scrollTo({ top: g.ends[0], behavior: "instant" });
-          if (beginFlaskFlash()) {
-            discard(event);
+        active = bridge(transition.index, direction > 0 ? 0 : 1);
+        active.offset = offsetAtPage(active, scrollY);
+        active.requested = active.offset;
+        moveBridge(delta, deliberate);
+        return;
+      }
+      if (owner < 0) return;
+      const index = owner as Index;
+      if (index > 0) {
+        const state = barStates[index - 1];
+        if (state.departure && state.departure !== direction) {
+          state.departure = 0;
+          if (scrollY >= arrivalAt(index as BarIndex) - 1) {
+            beginEntry(index as BarIndex);
             return;
           }
         }
-        active = bridge(transition.index, direction > 0 ? 0 : 1);
-        active.offset = active.exit + scrollY - active.start;
-        discard(event);
-        moveBridge(delta);
+        if (state.power > 0 && !state.departure &&
+            (direction < 0 || (index < 2 && scrollY >= g.ends[index] - 1))) {
+          beginBar(index as BarIndex, 0, direction);
+          return;
+        }
+        if (state.power === 0 && state.departure <= 0) {
+          const current = bridge(index, direction > 0 ? 0 : 1);
+          current.offset = offsetAtPage(current, scrollY);
+          current.requested = current.offset;
+          current.trailOrigin = current.offset;
+          current.reading = true;
+          active = current;
+          moveBridge(delta, deliberate);
+          return;
+        }
+      }
+      const atEdge = direction > 0 ? scrollY >= g.ends[index] - 1 : scrollY <= g.starts[index] + 1;
+      if (!atEdge || pageMotion) {
+        requestReading(index, delta);
         return;
       }
-      if (owner < 0 || (direction > 0 && owner === sections.length - 1)) return;
-      const index = direction > 0 ? owner + 1 : owner;
-      const current = bridge(index, direction > 0 ? 0 : 1);
-      const edge = direction > 0 ? current.start : current.end;
-      const crosses = direction > 0
-        ? scrollY <= edge + 1 && scrollY + delta >= edge
-        : scrollY >= edge - 1 && scrollY + delta <= edge;
-      if (!crosses) return;
-      discard(event);
-      const remaining = delta - (edge - scrollY);
-      window.scrollTo({ top: edge, behavior: "instant" });
-      if (owner === 0 && direction > 0 && beginFlaskFlash()) return;
-      if (owner > 0 && barStates[owner - 1].power > 0 && !barStates[owner - 1].departure) {
-        beginBar(owner as BarIndex, 0, direction);
-        if (barMotion) return;
-      }
-      active = current;
-      active.offset = direction > 0 ? 0 : bridgeLength(current);
-      moveBridge(remaining);
+      if (index === 0 && direction > 0 && beginFlaskFlash()) return;
+      if (index === 2 && direction > 0) return;
+      const next = direction > 0 ? index + 1 : index;
+      active = bridge(next, direction > 0 ? 0 : 1);
+      active.offset = direction > 0 ? 0 : bridgeLength(active);
+      active.requested = active.offset;
+      moveBridge(delta);
     }
     function wheel(event: WheelEvent) {
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      if (!event.deltaY) {
+        lastInputAt = performance.now();
+        stopMagnet();
+        queueSettle();
+        return;
+      }
       consume(event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1), event);
     }
     function key(event: KeyboardEvent) {
@@ -747,6 +826,15 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     function navigate() {
       stopMagnet();
       active = null;
+      pageMotion = null;
+      barMotion = null;
+      container.dataset.motionBusy = "false";
+      delete container.dataset.barAnimation;
+      stoppedDirection = 0;
+      barStates.forEach(state => {
+        state.departure = 0;
+        if (state.power < 1) state.power = 0;
+      });
       if (flaskFlash) {
         flaskFlash = null;
         flashStrength = 0;
@@ -758,18 +846,41 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       schedule();
     }
     function resized() {
-      navigate();
+      const current = active;
       routes.clear();
-      approaches.clear();
+      if (current) {
+        const reception = current.receptionProgress === undefined || current.index === 0 ? undefined
+          : mix(arrivalAt(current.index as BarIndex), geometry().ends[current.index], current.receptionProgress);
+        const next = bridge(current.index, current.origin, reception);
+        next.offset = current.offset / bridgeLength(current) * bridgeLength(next);
+        next.requested = current.requested / bridgeLength(current) * bridgeLength(next);
+        next.velocity = current.velocity;
+        next.reading = current.reading;
+        active = next;
+      }
+      if (pageMotion) {
+        const g = geometry();
+        pageMotion.actual = scrollY;
+        pageMotion.requested = scrollTarget(pageMotion.requested, 0,
+          g.starts[pageMotion.index], g.ends[pageMotion.index]);
+      }
+      curveTrail.reset();
+      schedule();
     }
     function preference() {
       animated = !media.matches && !!voyage?.querySelector("[data-voyage-stage]");
       container.dataset.animated = String(animated);
       svg.dataset.animated = String(animated);
+      if (!animated) navigate();
       resized();
     }
     const resize = new ResizeObserver(resized);
-    sections.forEach((el) => resize.observe(el));
+    sections.forEach((el) => {
+      resize.observe(el);
+      el.querySelectorAll<HTMLElement>("h2, h3, p, [data-descent-vessel], [data-descent-panel], [data-descent-bar]")
+        .forEach((anchor) => resize.observe(anchor));
+    });
+    document.fonts.addEventListener("loadingdone", resized);
     const mode = new MutationObserver(preference);
     if (voyage) mode.observe(voyage, { childList: true });
     media.addEventListener("change", preference);
@@ -793,6 +904,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       container.dataset.motionBusy = "false";
       delete container.dataset.barAnimation;
       resize.disconnect();
+      document.fonts.removeEventListener("loadingdone", resized);
       delete container.dataset.flaskFlash;
       mode.disconnect();
       media.removeEventListener("change", preference);

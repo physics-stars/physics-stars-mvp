@@ -15,9 +15,12 @@ export function LoginView() {
     <main id="main" className={styles.loginMain}>
       <div className={styles.loginArt}>
         <div className={styles.loginSculpture}>
-          <Image src="/logo.svg" alt="" fill sizes="300px" />
+          <Image src="/logo.svg" alt="" fill sizes="300px" loading="eager" />
         </div>
         <div className={styles.loginArtCopy}>
+          <p className={styles.loginArtLabel} translate="no">
+            Physics Stars
+          </p>
           <h2>{t.artTitle}</h2>
           <p>{t.artBody}</p>
         </div>

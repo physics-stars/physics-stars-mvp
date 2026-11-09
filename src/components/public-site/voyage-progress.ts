@@ -143,10 +143,16 @@ export function useVoyageProgress(
       if (!gate) return true;
       const age = performance.now() - gate.arrived,
         final = gate.point === waypointStops.at(-1);
+      // On returning from slide one, discard every input during the reading
+      // pause and keep its remaining inertia classified as the same gesture.
+      if (final && gate.returned && (!finalReadyRef.current || age < 1800)) {
+        gesture.absorbInertia(performance.now());
+        return false;
+      }
       // The hint, unlock and physical scroll cue begin together after the
       // final text has settled. Input ignored before then is never replayed.
       if (final && !finalReadyRef.current) return false;
-      if ((!final || gate.returned) && age < 350) return false;
+      if (!final && age < 350) return false;
       return deliberate;
     }
     function nextPoint(current: number, destination: number) {
@@ -197,7 +203,7 @@ export function useVoyageProgress(
       cueFrame = 0;
       const current = cue;
       if (!current) return;
-      const amount = smoothRange(0, 360, Math.max(0, time - current.started));
+      const amount = smoothRange(0, 900, Math.max(0, time - current.started));
       window.scrollTo({
         top: current.from + current.distance * amount,
         behavior: "instant",

@@ -16,6 +16,7 @@ import { voyageCopy } from "./voyage-copy";
 import { finale, visits, voyageState, waypointStops } from "./voyage-timeline";
 import { useVoyageProgress } from "./voyage-progress";
 import { VoyageLoader, type VoyageSceneState } from "./VoyageLoader";
+import { VoyageStarfield } from "./VoyageStarfield";
 import styles from "./voyage.module.css";
 
 const Scene = dynamic(() => import("./StarVoyageScene"), {
@@ -148,7 +149,7 @@ export function StarVoyage() {
           data-voyage-stage
           data-scene-state={sceneState}
         >
-          <div className={styles.starfield} aria-hidden="true" />
+          <VoyageStarfield />
           <div className={styles.cosmos} aria-hidden="true">
             <Scene
               key={locale}
