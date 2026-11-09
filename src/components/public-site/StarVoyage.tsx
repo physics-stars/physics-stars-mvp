@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { ArrowDown } from "lucide-react";
@@ -15,6 +15,7 @@ import { usePublicLocale } from "./PublicShell";
 import { voyageCopy } from "./voyage-copy";
 import { finale, visits, voyageState, waypointStops } from "./voyage-timeline";
 import { useVoyageProgress } from "./voyage-progress";
+import { finalTextOffset, finalTextOpacity, planetTextOffset, planetTextOpacity, voyageScrollDistance, voyageScrollLength } from "./continuous-scroll";
 import { VoyageLoader, type VoyageSceneState } from "./VoyageLoader";
 import { VoyageStarfield } from "./VoyageStarfield";
 import styles from "./voyage.module.css";
@@ -58,10 +59,7 @@ export function StarVoyage() {
     serverHeader,
   );
   const [active, setActive] = useState({ chapter: 0, reading: true });
-  const [logoFormed, setLogoFormed] = useState(false),
-    [finalTextReady, setFinalTextReady] = useState(false);
-  const [finalExitReady, setFinalExitReady] = useState(false);
-  const [directFinal, setDirectFinal] = useState(false);
+  const [logoFormed, setLogoFormed] = useState(false);
   const [sceneState, setSceneState] = useState<VoyageSceneState>("loading");
   const linear = reduced;
   const { scrollYProgress: scrollTarget } = useScroll({
@@ -80,22 +78,13 @@ export function StarVoyage() {
     track,
     headerHeight,
     !linear,
-    finalExitReady,
   );
-  useEffect(() => {
-    if (linear || !finalTextReady || navigationTarget !== null) return;
-    const timer = window.setTimeout(() => setFinalExitReady(true), 450);
-    return () => window.clearTimeout(timer);
-  }, [linear, finalTextReady, navigationTarget]);
+  const finalOpacity = useTransform(progress, finalTextOpacity);
+  const finalY = useTransform(progress, finalTextOffset);
   const scrollHintOpacity = useTransform(progress, [0, 0.012], [1, 0]);
   useMotionValueEvent(progress, "change", (p) => {
     const formed = p >= finale.sealed;
     setLogoFormed(formed);
-    if (!formed) {
-      setFinalTextReady(false);
-      setFinalExitReady(false);
-      setDirectFinal(false);
-    }
     const state = voyageState(p),
       chapter =
         state.phase === "hero"
@@ -104,7 +93,7 @@ export function StarVoyage() {
             ? visits.length + 1
             : state.index + 1;
     const isReading =
-      state.phase === "hero" || state.phase === "reading" || p >= 0.982;
+      state.phase === "hero" || state.phase === "reading" || p >= finale.sealed;
     setActive((previous) =>
       previous.chapter === chapter && previous.reading === isReading
         ? previous
@@ -112,17 +101,11 @@ export function StarVoyage() {
     );
   });
   function seek(index: number, direct = false) {
-    if (
-      document.querySelector<HTMLElement>("[data-descent-root]")?.dataset
-        .motionBusy === "true"
-    )
-      return;
     const element = track.current;
     if (!element) return;
     navigation.current
       ?.querySelector<HTMLButtonElement>(`[data-stop="${index}"]`)
       ?.focus({ preventScroll: true });
-    setDirectFinal(direct && index === waypointStops.length - 1);
     if (direct) {
       navigateTo(waypointStops[index]);
       return;
@@ -131,7 +114,7 @@ export function StarVoyage() {
     const length = element.offsetHeight - innerHeight + headerHeight;
     prepareSeek(waypointStops[index]);
     window.scrollTo({
-      top: top + length * waypointStops[index],
+      top: top + length * voyageScrollDistance(waypointStops[index]) / voyageScrollLength,
       behavior: "instant",
     });
   }
@@ -141,7 +124,7 @@ export function StarVoyage() {
       ref={track}
       className={`${styles.track} ${linear ? styles.linearTrack : ""}`}
       aria-label={copy.genre}
-      data-voyage-complete={linear || finalExitReady}
+      data-voyage-complete={linear || logoFormed}
     >
       {!linear && (
         <div
@@ -203,20 +186,11 @@ export function StarVoyage() {
             <motion.div
               data-voyage-final
               className={styles.finale}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: logoFormed ? 1 : 0, y: logoFormed ? 0 : 14 }}
-              transition={{
-                duration: logoFormed ? (directFinal ? 0.55 : 1.35) : 0.16,
-                delay: logoFormed ? 0.14 : 0,
-                ease: [0.45, 0, 0.25, 1],
-              }}
-              onAnimationComplete={() => {
-                setFinalTextReady(logoFormed);
-              }}
+              style={{ opacity: finalOpacity, y: finalY }}
               inert={
                 navigationTarget !== null ||
                 active.chapter !== visits.length + 1 ||
-                !finalTextReady
+                !logoFormed
               }
             >
               <p className={styles.wordmark}>
@@ -229,8 +203,8 @@ export function StarVoyage() {
                 data-voyage-continue
                 initial={{ opacity: 0, y: 6 }}
                 animate={{
-                  opacity: finalExitReady && navigationTarget === null ? 1 : 0,
-                  y: finalExitReady && navigationTarget === null ? 0 : 6,
+                  opacity: logoFormed && navigationTarget === null ? 1 : 0,
+                  y: logoFormed && navigationTarget === null ? 0 : 6,
                 }}
                 transition={{
                   duration: 0.45,
@@ -316,19 +290,14 @@ function VoyageFrame({
   active: boolean;
   children: ReactNode;
 }) {
-  const visit = visits[Math.max(0, index)];
-  const opacity = useTransform(
-    progress,
-    index < 0
-      ? [0, 0.018]
-      : [visit.parked, visit.textIn + 0.004, visit.textOut, visit.departure],
-    index < 0 ? [1, 0] : [0, 1, 1, 0],
-  );
+  const opacity = useTransform(progress, p => index < 0
+    ? 1 - Math.max(0, Math.min(1, p / 0.018)) : planetTextOpacity(p, index));
+  const y = useTransform(progress, p => index < 0 ? 0 : planetTextOffset(p, index));
   return (
     <motion.div
       data-voyage-copy={index}
       className={`${styles.frame} ${index < 0 ? styles.heroFrame : ""} ${index === 1 || index === 3 ? styles.reverseFrame : ""}`}
-      style={{ opacity }}
+      style={{ opacity, y }}
       inert={!active}
     >
       {children}

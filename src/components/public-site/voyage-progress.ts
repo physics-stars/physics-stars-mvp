@@ -1,61 +1,18 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useMotionValue, type MotionValue } from "framer-motion";
-import { finale, smoothRange, visits, waypointStops } from "./voyage-timeline";
-import { ScrollGesture } from "./scroll-gesture";
+import { finale, smoothRange } from "./voyage-timeline";
 import { scrollHandoffEvent, type ScrollHandoff } from "./descent-controller";
+import { scrollInputTarget, followVoyage, maximumInputLag, PlanetGravity, planetGravityDelay, planetReadingCenter, TouchMomentum,
+  voyageProgressAt, voyageScrollDistance, voyageScrollLength, voyageSpeedLimit } from "./continuous-scroll";
 
-const checkpoints = waypointStops.slice(1);
-const maximumCueDistance = 28;
-export type VoyageNavigationFlight = {
-  id: number;
-  from: number;
-  to: number;
-  amount: number;
-};
-const longerFlights = [
-  [0, visits[0].parked],
-  [visits[1].departure, visits[2].parked],
-  [visits[2].departure, visits[3].parked],
-  [visits.at(-1)!.departure, finale.settled],
-];
-function speedLimit(p: number) {
-  // Raise cruising speed without a step at either end of the longer flights.
-  const longerFlight = Math.max(
-    ...longerFlights.map(
-      ([start, end]) =>
-        smoothRange(start, start + 0.012, p) *
-        (1 - smoothRange(end - 0.012, end, p)),
-    ),
-  );
-  const flight = 0.06 + 0.006 * longerFlight;
-  const visit = visits.find(
-    (visit) => p >= visit.parked && p <= visit.departure,
-  );
-  if (visit) {
-    const reading =
-      smoothRange(visit.parked, visit.parked + 0.01, p) *
-      (1 - smoothRange(visit.departure - 0.01, visit.departure, p));
-    return flight + 0.27 * reading;
-  }
-  return flight + 0.2 * smoothRange(finale.settled, finale.sealed, p);
-}
+export type VoyageNavigationFlight = { id: number; from: number; to: number; amount: number };
 
-/** Native scroll drives a speed-limited playhead. Reading checkpoints consume inertia. */
-export function useVoyageProgress(
-  target: MotionValue<number>,
-  track: RefObject<HTMLElement | null>,
-  header: number,
-  enabled: boolean,
-  finalReady: boolean,
-) {
+/** Inputs have less effect, with a short bounded response instead of a long
+ * playback queue. Gravity is independent of animations and reading gates. */
+export function useVoyageProgress(target: MotionValue<number>, track: RefObject<HTMLElement | null>,
+  header: number, enabled: boolean) {
   const progress = useMotionValue(0);
   const navigationOpacity = useMotionValue(1);
   const navigationFlight = useMotionValue<VoyageNavigationFlight | null>(null);
@@ -63,801 +20,278 @@ export function useVoyageProgress(
   const headerRef = useRef(header);
   useEffect(() => { headerRef.current = header; }, [header]);
   const [navigationTarget, setNavigationTarget] = useState<number | null>(null);
-  const finalReadyRef = useRef(finalReady);
-  const cueIssued = useRef(false);
-  const startCueRef = useRef<() => void>(() => {});
-  const stopCueRef = useRef<() => void>(() => {});
-  useEffect(() => {
-    finalReadyRef.current = finalReady;
-    if (!finalReady) {
-      cueIssued.current = false;
-      stopCueRef.current();
-    } else if (enabled && !cueIssued.current) {
-      cueIssued.current = true;
-      startCueRef.current();
-    }
-  }, [finalReady, enabled]);
   const seekRef = useRef<(p: number) => void>(() => {});
-  const prepareSeek = useCallback((p: number) => seekRef.current(p), []);
   const navigateRef = useRef<(p: number) => void>(() => {});
+  const prepareSeek = useCallback((p: number) => seekRef.current(p), []);
   const navigateTo = useCallback((p: number) => navigateRef.current(p), []);
+
   useEffect(() => {
-    if (!enabled) return;
-    let frame = 0,
-      previousTime = 0,
-      velocity = 0,
-      lastIntent = 0;
-    const gesture = new ScrollGesture();
-    let directSeek: {
-      id: number;
-      point: number;
-      from: number;
-      started: number;
-      fadeFrom: number;
-      fadeDuration: number;
-      travelDuration: number;
-      revealDelay: number;
-      revealDuration: number;
-      arrived: boolean;
-    } | null = null;
-    let gate: {
-      point: number;
-      arrived: number;
-      returned: boolean;
-    } | null = null;
-    let nativeExit = false;
-    let cue: { from: number; distance: number; started: number } | null = null;
-    let cueFrame = 0;
-    let previousBounds: { start: number; length: number } | null = null;
-    const trackElement = track.current;
-    let wasBelow = false,
-      previousNativeY = scrollY;
-    let allowNativeJumpUntil =
-      location.hash && location.hash !== "#main" ? performance.now() + 1200 : 0;
-    let ignored: number | null = null,
-      bypass: number | null = null,
-      pending: number | null = null,
-      touchY: number | null = 0,
-      newTouch = false;
+    const element = document.getElementById("idea");
+    if (!enabled || !element || element !== track.current) return;
+    let disposed = false, frame = 0, previousTime = 0, velocity = 0;
+    let lastInputAt = -Infinity, lastWrittenY = NaN;
+    const touch = new TouchMomentum();
+    const gravity = new PlanetGravity();
+    let touchY: number | null = null;
     function bounds() {
-      const element = track.current;
-      if (!element) return null;
-      const start = element.getBoundingClientRect().top + scrollY - headerRef.current;
-      return { start, length: element.offsetHeight - innerHeight + headerRef.current };
+      const start = element!.getBoundingClientRect().top + scrollY - headerRef.current;
+      const total = element!.offsetHeight - innerHeight + headerRef.current;
+      return { start, total, length: total / voyageScrollLength };
     }
-    function inside() {
-      const b = bounds();
-      return (
-        !nativeExit && !!b &&
-        scrollY >= b.start - 2 && scrollY <= b.start + b.length + 2
-      );
-    }
-    function scrollToPoint(p: number) {
-      const b = bounds();
-      if (b)
-        window.scrollTo({ top: b.start + b.length * p, behavior: "instant" });
+    const initial = bounds();
+    let nativeExit = scrollY > initial.start + initial.total + 2;
+    let requested = Math.max(0, Math.min(1, voyageProgressAt((scrollY - initial.start) / initial.length)));
+    progress.set(nativeExit ? 1 : requested);
+    let directSeek: {
+      id: number; point: number; from: number; fadeFrom: number; started: number;
+      fadeDuration: number; travelDuration: number; revealDelay: number; revealDuration: number;
+    } | null = null;
+    function visiblePlanet() {
+      const value = element!.querySelector<HTMLCanvasElement>("canvas[data-engine]")?.dataset.fullyVisiblePlanet;
+      return value === undefined || value === "-1" ? null : Number(value);
     }
     function mark() {
-      if (track.current)
-        track.current.dataset.scrollCheckpoint = gate ? "reading" : "flight";
-    }
-    function canRelease(deliberate: boolean) {
-      if (!gate) return true;
-      const age = performance.now() - gate.arrived,
-        final = gate.point === waypointStops.at(-1);
-      // On returning from slide one, discard every input during the reading
-      // pause and keep its remaining inertia classified as the same gesture.
-      if (final && gate.returned && (!finalReadyRef.current || age < 900)) {
-        gesture.absorbInertia(performance.now());
-        return false;
-      }
-      // The hint, unlock and physical scroll cue begin together after the
-      // final text has settled. Input ignored before then is never replayed.
-      if (final && !finalReadyRef.current) return false;
-      if (!final && age < 350) return false;
-      return deliberate;
-    }
-    function nextPoint(current: number, destination: number) {
-      const direction = Math.sign(destination - current);
-      const candidates = checkpoints.filter(
-        (point) =>
-          point !== ignored &&
-          (bypass === null || Math.abs(point - bypass) < 0.00001),
-      );
-      return direction >= 0
-        ? candidates.find(
-            (point) =>
-              point > current + 0.000005 && point <= destination + 0.0002,
-          )
-        : candidates
-            .toReversed()
-            .find(
-              (point) =>
-                point < current - 0.000005 && point >= destination - 0.0002,
-            );
-    }
-    function arrive(point: number, returned = false) {
-      gate = {
-        point,
-        arrived: performance.now(),
-        returned,
-      };
-      bypass = null;
-      pending = null;
-      newTouch = false;
-      velocity = 0;
-      previousTime = 0;
-      frame = 0;
-      progress.set(point);
-      scrollToPoint(point);
-      mark();
+      const p = progress.get();
+      element!.dataset.scrollCheckpoint = planetReadingCenter(p, p, visiblePlanet()) !== null || p >= finale.sealed ? "reading" : "flight";
+      element!.dataset.voyageRequested = requested.toFixed(6);
+      element!.dataset.scrollOwner = nativeExit ? "descent" : "voyage";
+      if (planetReadingCenter(p, p, visiblePlanet()) === null) delete element!.dataset.voyageGravity;
     }
     function schedule() {
-      if (!frame) frame = requestAnimationFrame(tick);
+      if (!disposed && !frame) frame = requestAnimationFrame(tick);
     }
-    function stopCue() {
-      cancelAnimationFrame(cueFrame);
-      cueFrame = 0;
-      cue = null;
-      if (trackElement) delete trackElement.dataset.voyageCue;
-    }
-    function followCue(time: number) {
-      cueFrame = 0;
-      const current = cue;
-      if (!current) return;
-      const amount = smoothRange(0, 900, Math.max(0, time - current.started));
-      window.scrollTo({
-        top: current.from + current.distance * amount,
-        behavior: "instant",
-      });
-      if (amount < 1) cueFrame = requestAnimationFrame(followCue);
-      else {
-        stopCue();
-        // Explicitly let go: one gravity controller now owns the return.
-        window.dispatchEvent(new Event("landing-scroll-release"));
-      }
-    }
-    startCueRef.current = () => {
+    function write(p: number) {
+      progress.set(p);
+      target.set(voyageScrollDistance(p) / voyageScrollLength);
       const b = bounds();
-      if (!b || directSeek || progress.get() < finale.sealed) return;
-      const end = b.start + b.length;
-      if (Math.abs(scrollY - end) > 2) return;
-      cue = {
-        from: scrollY,
-        distance: Math.min(maximumCueDistance, Math.max(18, (innerHeight - headerRef.current) * 0.03)),
-        started: performance.now(),
-      };
-      if (trackElement) trackElement.dataset.voyageCue = "peek";
-      nativeExit = true;
-      gate = null;
-      pending = null;
-      bypass = null;
-      velocity = 0;
-      progress.set(1);
+      lastWrittenY = b.start + b.length * voyageScrollDistance(p);
+      window.scrollTo({ top: lastWrittenY, behavior: "instant" });
       mark();
-      cueFrame = requestAnimationFrame(followCue);
-    };
-    stopCueRef.current = stopCue;
+    }
     function clearDirectSeek() {
       directSeek = null;
       navigationFlight.set(null);
       navigationOpacity.set(1);
       setNavigationTarget(null);
-      if (track.current) delete track.current.dataset.voyageNavigation;
+      delete element!.dataset.voyageNavigation;
     }
     function followDirectSeek(time: number) {
-      const seek = directSeek;
-      if (!seek) return;
+      const seek = directSeek!;
       const elapsed = time - seek.started;
       const travelEnd = seek.fadeDuration + seek.travelDuration;
       if (elapsed < seek.fadeDuration) {
-        navigationOpacity.set(
-          seek.fadeFrom * (1 - smoothRange(0, seek.fadeDuration, elapsed)),
-        );
+        navigationOpacity.set(seek.fadeFrom * (1 - smoothRange(0, seek.fadeDuration, elapsed)));
       } else if (elapsed < travelEnd) {
         navigationOpacity.set(0);
-        if (track.current) track.current.dataset.voyageNavigation = "travel";
-        const t = Math.max(
-          0,
-          Math.min(1, (elapsed - seek.fadeDuration) / seek.travelDuration),
-        );
+        element!.dataset.voyageNavigation = "travel";
+        const t = Math.max(0, Math.min(1, (elapsed - seek.fadeDuration) / seek.travelDuration));
         const amount = t * t * (3 - 2 * t);
-        navigationFlight.set({
-          id: seek.id,
-          from: seek.from,
-          to: seek.point,
-          amount,
-        });
-        progress.set(seek.from + (seek.point - seek.from) * amount);
+        navigationFlight.set({ id: seek.id, from: seek.from, to: seek.point, amount });
+        write(seek.from + (seek.point - seek.from) * amount);
       } else {
-        if (!seek.arrived) {
-          seek.arrived = true;
-          navigationFlight.set({
-            id: seek.id,
-            from: seek.from,
-            to: seek.point,
-            amount: 1,
-          });
-          arrive(seek.point);
-          if (seek.point === 0) {
-            gate = null;
-            mark();
-          }
-          if (track.current) track.current.dataset.voyageNavigation = "reveal";
-        }
+        navigationFlight.set({ id: seek.id, from: seek.from, to: seek.point, amount: 1 });
+        write(seek.point);
+        element!.dataset.voyageNavigation = "reveal";
         const revealStart = travelEnd + seek.revealDelay;
-        navigationOpacity.set(
-          smoothRange(revealStart, revealStart + seek.revealDuration, elapsed),
-        );
+        navigationOpacity.set(smoothRange(revealStart, revealStart + seek.revealDuration, elapsed));
         if (elapsed >= revealStart + seek.revealDuration) {
+          requested = seek.point;
           clearDirectSeek();
           previousTime = 0;
+          schedule();
           return;
         }
       }
       schedule();
     }
-    function leaveVoyage(delta: number, input: Event) {
-      // Transfer this same input before any native scroll can cross a slide.
-      // The descent's RAF owns its distance and caps it at the first stop.
-      if (input.cancelable) input.preventDefault();
-      stopCue();
-      gate = null;
-      pending = null;
-      bypass = null;
-      velocity = 0;
-      progress.set(1);
-      mark();
-      nativeExit = !window.dispatchEvent(new CustomEvent<ScrollHandoff>(
-        scrollHandoffEvent,
-        { detail: { delta, input }, cancelable: true },
-      ));
-      // Until the receiver is ready, keep the input here instead of leaking it
-      // to native scrolling. No ignored distance is saved for a later event.
-      if (!nativeExit) scrollToPoint(1);
-    }
-    function handoffAtExit(delta: number, input: Event) {
+    function handoff() {
       const b = bounds();
-      if (!nativeExit || !delta || !b) return false;
-      const end = b.start + b.length;
-      // Includes the small physical cue, even when touchstart already stopped
-      // it before its first frame. The descent captures later input itself.
-      if (scrollY < end - 2 || scrollY > end + maximumCueDistance + 2) return false;
-      leaveVoyage(delta, input);
-      return true;
-    }
-    function release(direction: number, delta: number, input: Event) {
-      if (!gate) return;
-      lastIntent = performance.now();
-      const point = gate.point,
-        index = checkpoints.indexOf(point),
-        visit = visits[index];
-      ignored = index >= visits.length && direction < 0 ? null : point;
-      gate = null;
-      bypass = null;
-      pending = null;
-      velocity = 0;
-      mark();
-      if (!visit && direction > 0) {
-        leaveVoyage(delta, input);
-        return;
-      }
-      const b = bounds();
-      const edge = visit
-        ? direction > 0
-          ? visit.departure
-          : visit.parked
-        : direction > 0
-          ? 1
-          : finale.sealed;
-      const proposed = edge + (b ? delta / b.length : direction * 0.004);
-      const following = nextPoint(edge, proposed);
-      pending = following ?? null;
-      scrollToPoint(following ?? proposed);
-      schedule();
+      write(1);
+      const accepted = !window.dispatchEvent(new CustomEvent<ScrollHandoff>(scrollHandoffEvent,
+        { detail: { delta: Math.max(0, (requested - 1) * b.length), quietSince: lastInputAt }, cancelable: true }));
+      if (accepted) {
+        nativeExit = true;
+        requested = 1;
+        mark();
+      } else schedule();
     }
     function tick(time: number) {
-      if (directSeek) {
-        frame = 0;
-        followDirectSeek(time);
-        return;
-      }
-      if (nativeExit) {
-        progress.set(1);
-        frame = 0;
-        previousTime = 0;
-        return;
-      }
-      const dt = Math.min(
-        previousTime ? (time - previousTime) / 1000 : 1 / 60,
-        0.032,
-      );
+      frame = 0;
+      if (disposed || nativeExit) return;
+      if (directSeek) { followDirectSeek(time); return; }
+      const dt = Math.min(previousTime ? time - previousTime : 16, 32);
       previousTime = time;
       const current = progress.get();
-      let raw = target.get();
-      const b = bounds();
-      const settling = gesture.settling(time);
-      if (inside() && !gate && pending === null && b && settling &&
-          Math.abs(velocity) * b.length < 90) {
-        const distance = (p: number, start: number, end: number) =>
-          Math.max(start - p, p - end, 0) * b.length;
-        const near = visits.find(visit =>
-          distance(current, visit.parked, visit.departure) <= 24 &&
-          distance(raw, visit.parked, visit.departure) <= 24);
-        if (near) {
-          // Re-enter the reading pose even if the reverse gesture ended before
-          // the light caught up. No discarded input is replayed.
-          pending = waypointStops[near.index + 1];
-          ignored = null;
-          bypass = null;
-          target.set(pending);
-          raw = pending;
-          scrollToPoint(pending);
-        }
-      }
-      if (
-        inside() && !gate && current >= finale.sealed && raw >= current &&
-        current < waypointStops.at(-1)! && pending !== waypointStops.at(-1)
-      ) {
-        // Finish the stationary logo view before its text appears. Its final
-        // reading anchor is also the exact start of the first slide boundary.
-        pending = waypointStops.at(-1)!;
-        target.set(pending);
-        scrollToPoint(pending);
-      }
-      if (!inside()) {
-        gate = null;
-        pending = null;
-        mark();
-      }
-      if (
-        pending !== null &&
-        Math.abs(raw - pending) > 0.0005 &&
-        (raw - current) * (pending - current) < 0
-      )
-        pending = null;
-      if (ignored !== null) {
-        const visit = visits[checkpoints.indexOf(ignored)];
-        if (
-          visit
-            ? current < visit.parked - 0.004 ||
-              current > visit.departure + 0.004
-            : current < finale.settled
-        )
-          ignored = null;
-      }
-      const canStop =
-        inside() &&
-        (pending !== null ||
-          bypass !== null ||
-          (lastIntent > 0 && performance.now() - lastIntent < 1800));
-      const checkpoint = canStop && !gate ? nextPoint(current, raw) : undefined;
-      if (checkpoint !== undefined) pending = checkpoint;
-      const destination = gate?.point ?? pending ?? raw,
-        delta = destination - current;
-      const nearRest = (pending !== null || gate !== null) && settling && b && Math.abs(delta) * b.length <= 24 &&
-        Math.abs(velocity) * b.length < 90;
-      if ((Math.abs(delta) < 0.000008 && Math.abs(velocity) < 0.00004) ||
-          (pending !== null && nearRest && Math.abs(delta) * b!.length < 1)) {
-        if (pending !== null) {
-          arrive(pending);
-          return;
-        }
-        progress.set(destination);
-        frame = 0;
-        previousTime = 0;
+      const center = planetReadingCenter(current, requested, visiblePlanet());
+      requested = gravity.target(current, requested, center, dt, time - lastInputAt);
+      if (center !== null && time - lastInputAt >= planetGravityDelay)
+        element!.dataset.voyageGravity = center.toFixed(6);
+      else delete element!.dataset.voyageGravity;
+      if (current >= 1 - 0.0000001 && requested > 1) { handoff(); return; }
+      const destination = Math.max(0, requested);
+      const delta = destination - current;
+      if (Math.abs(delta) < 0.0000001 && Math.abs(velocity) < 0.000001) {
         velocity = 0;
-        if (bypass !== null && Math.abs(destination - bypass) < 0.0002)
-          bypass = null;
+        write(destination);
+        if (center !== null && Math.abs(requested - center) > 0.0000001) schedule();
         return;
       }
-      const frequency = nearRest ? 14 : 12,
-        decay = Math.exp(-frequency * dt),
-        coefficient = velocity - frequency * delta;
-      let next = destination + (-delta + coefficient * dt) * decay;
-      velocity = (velocity - frequency * coefficient * dt) * decay;
-      const maximum = speedLimit(current);
-      if (Math.abs(velocity) > maximum) {
-        velocity = Math.sign(velocity) * maximum;
-        next = current + velocity * dt;
-      }
-      if (pending !== null && (next - pending) * (current - pending) <= 0) {
-        arrive(pending);
-        return;
-      }
-      progress.set(Math.max(0, Math.min(1, next)));
-      frame = requestAnimationFrame(tick);
-    }
-    function consumeDelta(delta: number, event: Event) {
-      if (!delta) return;
-      const b = bounds();
-      if (!b) return;
-      const current = progress.get(),
-        backlog = target.get() - current;
-      const reversed =
-        Math.abs(backlog) > 0.001 && Math.sign(backlog) !== Math.sign(delta);
-      if (reversed) {
-        pending = null;
-        bypass = null;
-      }
-      const base = reversed ? current : (scrollY - b.start) / b.length;
-      const canLeave =
-        finalReadyRef.current && current >= checkpoints.at(-1)! - 0.00001;
-      if (canLeave && delta > 0) {
-        if (event.cancelable) event.preventDefault();
-        leaveVoyage(delta, event);
-        return;
-      }
-      const proposed = Math.min(
-          canLeave ? Infinity : checkpoints.at(-1)!,
-          base + delta / b.length,
-        ),
-        point = nextPoint(current, proposed);
-      const capped =
-        point !== undefined &&
-        ((delta > 0 && proposed > point) || (delta < 0 && proposed < point));
-      // Own the native target while the stage is active. Letting a touch gesture
-      // start native momentum and correcting it after scroll caused a tug of war
-      // with section snapping at the final boundary.
-      if (event.cancelable) event.preventDefault();
-      scrollToPoint(capped && point !== undefined ? point : proposed);
+      const next = followVoyage(current, destination, velocity, dt);
+      velocity = next.velocity;
+      if (next.unbounded >= 1 && requested > 1) { handoff(); return; }
+      write(next.position);
       schedule();
     }
-    function reenterFinal() {
-      gesture.absorbInertia(performance.now());
-      cancelAnimationFrame(frame);
-      frame = 0;
-      previousTime = 0;
-      velocity = 0;
-      ignored = null;
-      pending = null;
-      bypass = null;
-      wasBelow = false;
-      if (track.current) delete track.current.dataset.voyageSkip;
-      nativeExit = false;
-      arrive(waypointStops.at(-1)!, true);
-      previousNativeY = scrollY;
-    }
-    function navigation(event: MouseEvent) {
-      const anchor =
-        event.target instanceof Element
-          ? event.target.closest<HTMLAnchorElement>('a[href^="#"]')
-          : null;
-      if (anchor && ["#sobre", "#equip", "#pilot"].includes(anchor.hash)) {
-        if (directSeek) clearDirectSeek();
-        allowNativeJumpUntil = performance.now() + 1200;
-        if (track.current) track.current.dataset.voyageSkip = "true";
-      }
-    }
-    function navigate(event: Event) {
-      stopCue();
-      const home = (event as CustomEvent<string>).detail === "idea";
-      clearDirectSeek();
-      cancelAnimationFrame(frame);
-      frame = 0;
-      previousTime = 0;
-      velocity = 0;
-      gate = null;
-      ignored = null;
-      pending = null;
-      bypass = null;
-      allowNativeJumpUntil = performance.now() + 1200;
-      wasBelow = !home;
-      nativeExit = !home;
-      if (track.current) {
-        if (home) delete track.current.dataset.voyageSkip;
-        else track.current.dataset.voyageSkip = "true";
-      }
-      progress.set(home ? 0 : 1);
-      target.set(home ? 0 : 1);
-      previousNativeY = home ? 0 : scrollY;
-      mark();
-    }
-    function nativeScroll() {
-      if (directSeek) {
-        previousNativeY = scrollY;
-        return;
-      }
+    function consume(delta: number, input?: Event) {
+      if (!delta || nativeExit) return;
+      if (input?.cancelable) input.preventDefault();
+      if (directSeek) { clearDirectSeek(); requested = progress.get(); }
       const b = bounds();
-      if (!b) return;
-      const y = scrollY,
-        end = b.start + b.length;
-      const finalY = b.start + b.length * waypointStops.at(-1)!;
-      if (nativeExit && previousNativeY > finalY + 1 && y <= finalY + 1 && y >= b.start - 2) {
-        reenterFinal();
-        return;
-      }
-      if (
-        y > end + 2 &&
-        previousNativeY <= end + 2 &&
-        performance.now() > allowNativeJumpUntil &&
-        !finalReadyRef.current
-      ) {
-        gate = null;
-        ignored = null;
-        bypass = waypointStops.at(-1)!;
-        pending = bypass;
-        wasBelow = false;
-        scrollToPoint(bypass);
-        previousNativeY = scrollY;
-        mark();
-        schedule();
-        return;
-      }
-      wasBelow = y > end + 2;
-      if (wasBelow && (finalReadyRef.current || performance.now() <= allowNativeJumpUntil))
-        nativeExit = true;
-      previousNativeY = y;
+      const descentLength = Number(document.querySelector<HTMLElement>("[data-descent-root]")?.dataset.scrollLength) || innerHeight * 4;
+      const current = progress.get();
+      const lead = voyageScrollDistance(current + voyageSpeedLimit(current) * maximumInputLag / 1000) - voyageScrollDistance(current);
+      requested = voyageProgressAt(scrollInputTarget(voyageScrollDistance(current), voyageScrollDistance(requested),
+        delta / b.length, 0, voyageScrollLength + descentLength / b.length, lead));
+      lastInputAt = performance.now();
+      gravity.reset();
+      delete element!.dataset.voyageGravity;
+      schedule();
     }
     function wheel(event: WheelEvent) {
-      if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY))
-        return;
-      const delta =
-        event.deltaY *
-        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
-      const deliberate = gesture.read(delta, performance.now());
-      if (cue) {
-        if (!deliberate) {
-          if (event.cancelable) event.preventDefault();
-          return;
-        }
-        stopCue();
-      }
-      if (directSeek) {
-        if (event.cancelable) event.preventDefault();
-        return;
-      }
-      if (handoffAtExit(delta, event)) return;
-      if (!inside()) return;
-      if (!delta) return;
-      if (gate) {
-        event.preventDefault();
-        if (canRelease(deliberate)) release(Math.sign(delta), delta, event);
-        else scrollToPoint(gate.point);
-        return;
-      }
-      bypass = null;
-      lastIntent = performance.now();
-      consumeDelta(delta, event);
+      if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      consume(event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1), event);
     }
     function key(event: KeyboardEvent) {
-      if (event.altKey || event.metaKey) return;
-      if (event.ctrlKey && !["End", "Home"].includes(event.key)) return;
-      if (
-        event.target instanceof HTMLElement &&
-        (event.target.matches("input,textarea,select") ||
-          event.target.isContentEditable)
-      )
-        return;
-      if (
-        event.key === " " &&
-        event.target instanceof HTMLElement &&
-        event.target.matches("button,a")
-      )
-        return;
-      const direction = ["ArrowDown", "PageDown", "End", " "].includes(
-        event.key,
-      )
-        ? event.shiftKey
-          ? -1
-          : 1
-        : ["ArrowUp", "PageUp", "Home"].includes(event.key)
-          ? -1
-          : 0;
-      if (!direction) return;
-      const b = bounds();
-      if (!b) return;
-      const delta =
-        direction *
-        (["End", "Home"].includes(event.key)
-          ? b.length
-          : ["PageDown", "PageUp", " "].includes(event.key)
-            ? innerHeight * 0.8
-            : 70);
-      const deliberate = gesture.read(delta, performance.now(), !event.repeat);
-      if (cue) stopCue();
-      if (directSeek) {
-        if (event.cancelable) event.preventDefault();
-        return;
-      }
-      if (handoffAtExit(delta, event)) return;
-      if (!inside()) return;
-      if (gate) {
+      if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey ||
+        (event.target instanceof HTMLElement && (event.target.matches("input,textarea,select") || event.target.isContentEditable))) return;
+      if (event.key === " " && event.target instanceof HTMLElement && event.target.matches("button,a")) return;
+      const down = ["ArrowDown", "PageDown", "End", " "].includes(event.key);
+      const up = ["ArrowUp", "PageUp", "Home"].includes(event.key);
+      if (!down && !up) return;
+      if (["End", "Home"].includes(event.key)) {
+        if (nativeExit) return;
         event.preventDefault();
-        if (canRelease(deliberate))
-          release(direction, delta, event);
-      } else {
-        lastIntent = performance.now();
-        consumeDelta(delta, event);
+        const id = event.key === "Home" ? "idea" : "pilot";
+        window.dispatchEvent(new CustomEvent("landing-navigate", { detail: id }));
+        const top = id === "idea" ? 0 : document.getElementById(id)!.getBoundingClientRect().top + scrollY - headerRef.current;
+        window.scrollTo({ top, behavior: "instant" });
+        return;
       }
+      const direction = up || (event.key === " " && event.shiftKey) ? -1 : 1;
+      const distance = ["End", "Home"].includes(event.key) ? document.documentElement.scrollHeight * 2
+        : event.key.startsWith("Arrow") ? 70 : innerHeight * 0.8;
+      consume(direction * distance, event);
     }
     function touchStart(event: TouchEvent) {
-      stopCue();
-      if (event.touches.length !== 1) {
-        touchY = null;
-        newTouch = false;
-        return;
-      }
-      touchY = event.touches[0]?.clientY ?? 0;
-      newTouch = true;
+      touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
+      touch.start(performance.now());
     }
     function touchMove(event: TouchEvent) {
-      if (touchY === null || event.touches.length !== 1) {
-        touchY = null;
-        return;
-      }
-      const y = event.touches[0].clientY;
-      const delta = touchY - y;
+      if (touchY === null || event.touches.length !== 1) return;
+      const y = event.touches[0].clientY, delta = touchY - y;
       touchY = y;
-      const deliberate = gesture.read(delta, performance.now(), newTouch);
-      if (delta) newTouch = false;
-      if (directSeek && event.touches.length === 1) {
-        if (event.cancelable) event.preventDefault();
-        return;
-      }
-      if (handoffAtExit(delta, event)) return;
-      if (!inside()) return;
-      if (gate) {
-        event.preventDefault();
-        if (canRelease(deliberate) && delta !== 0) {
-          newTouch = false;
-          release(Math.sign(delta), delta, event);
-        }
-      } else {
-        lastIntent = performance.now();
-        consumeDelta(delta, event);
-      }
+      touch.move(delta, performance.now());
+      consume(delta, event);
     }
-    seekRef.current = (point) => {
-      stopCue();
-      if (directSeek) clearDirectSeek();
-      if (track.current) delete track.current.dataset.voyageSkip;
+    function touchEnd() { touchY = null; consume(touch.release(performance.now())); }
+    function resume(event: Event) {
+      gravity.reset();
+      clearDirectSeek();
       nativeExit = false;
-      gate = null;
-      ignored = null;
-      pending = null;
-      bypass = point;
+      const delta = (event as CustomEvent<{ delta?: number }>).detail?.delta ?? 0;
+      requested = Math.max(0, voyageProgressAt(voyageScrollLength + delta / bounds().length));
       velocity = 0;
-      mark();
-      schedule();
-    };
-    navigateRef.current = (point) => {
-      stopCue();
-      if (directSeek?.point === point) return;
-      if (!directSeek && Math.abs(progress.get() - point) < 0.00001) return;
-      cancelAnimationFrame(frame);
-      frame = 0;
       previousTime = 0;
-      if (track.current) {
-        delete track.current.dataset.voyageSkip;
-        track.current.dataset.voyageNavigation = "fade";
-      }
-      gate = null;
-      ignored = null;
-      pending = null;
-      bypass = null;
-      velocity = 0;
-      nativeExit = false;
-      const from = progress.get();
-      const fadeFrom = navigationOpacity.get();
-      directSeek = {
-        id: ++navigationSequence.current,
-        point,
-        from,
-        fadeFrom,
-        started: performance.now(),
-        fadeDuration: 110 * fadeFrom,
-        travelDuration: 750 + 1450 * Math.abs(point - from),
-        revealDelay: point === 0 || point >= finale.sealed ? 140 : 0,
-        revealDuration: point === 0 || point >= finale.sealed ? 480 : 150,
-        arrived: false,
-      };
-      navigationFlight.set({ id: directSeek.id, from, to: point, amount: 0 });
-      setNavigationTarget(point);
-      mark();
+      lastInputAt = performance.now();
+      write(1);
       schedule();
-    };
-    const unsubscribe = target.on("change", schedule);
-    function revealClearedEndpoint(event: Event) {
-      if (
-        !directSeek ||
-        (event as CustomEvent<number>).detail !== directSeek.id
-      )
-        return;
-      // There is no reason to keep travelling across an empty screen once the
-      // final visible planet has left the frame on a direct endpoint jump.
-      directSeek.travelDuration = Math.min(
-        directSeek.travelDuration,
-        Math.max(
-          0,
-          performance.now() - directSeek.started - directSeek.fadeDuration,
-        ),
-      );
+    }
+    function navigate(event: Event) {
+      gravity.reset();
+      clearDirectSeek();
+      const home = (event as CustomEvent<string>).detail === "idea";
+      nativeExit = !home;
+      requested = home ? 0 : 1;
+      velocity = 0;
+      previousTime = 0;
+      progress.set(requested);
+      mark();
+      if (home) schedule();
+    }
+    function nativeScroll() {
+      if (nativeExit || directSeek || Math.abs(scrollY - lastWrittenY) <= 2) return;
+      const b = bounds();
+      const p = voyageProgressAt((scrollY - b.start) / b.length);
+      if (p > 1.0005) { nativeExit = true; progress.set(1); mark(); return; }
+      requested = Math.max(0, p);
+      progress.set(Math.max(0, Math.min(1, p)));
+      velocity = 0;
+      lastInputAt = performance.now();
+      gravity.reset();
       schedule();
     }
     function resized() {
-      stopCue();
-      const wasInside = !nativeExit && previousBounds &&
-        previousNativeY >= previousBounds.start - 2 &&
-        previousNativeY <= previousBounds.start + previousBounds.length + 2;
-      // Resize changes the track's physical length, not the narrative position.
-      // Use the new header immediately, before React's media subscription runs.
       headerRef.current = innerWidth <= 760 ? 68 : 76;
-      if (wasInside) {
-        const p = progress.get();
-        cancelAnimationFrame(frame);
-        frame = 0;
-        previousTime = 0;
-        velocity = 0;
-        pending = null;
-        target.set(p);
-        scrollToPoint(p);
-        previousNativeY = scrollY;
-        wasBelow = false;
-        schedule();
-      }
-      previousBounds = bounds();
+      if (!nativeExit) { write(progress.get()); schedule(); }
     }
-    trackElement?.addEventListener(
-      "voyage-endpoint-clear",
-      revealClearedEndpoint,
-    );
-    const initialBounds = bounds();
-    previousBounds = initialBounds;
-    wasBelow =
-      !!initialBounds &&
-      scrollY > initialBounds.start + initialBounds.length + 2;
-    nativeExit = wasBelow;
-    window.addEventListener("scroll", nativeScroll, { passive: true });
-    window.addEventListener("pointerdown", stopCue, { passive: true });
-    window.addEventListener("resize", resized);
-    window.addEventListener("click", navigation);
-    window.addEventListener("landing-navigate", navigate);
-    window.addEventListener("landing-logo-return", reenterFinal);
+    seekRef.current = (point) => {
+      gravity.reset();
+      clearDirectSeek(); nativeExit = false; requested = point; velocity = 0;
+      write(point); schedule();
+    };
+    navigateRef.current = (point) => {
+      gravity.reset();
+      if (directSeek?.point === point) return;
+      const from = progress.get(), fadeFrom = navigationOpacity.get();
+      nativeExit = false; requested = point; velocity = 0; previousTime = 0;
+      window.dispatchEvent(new Event("landing-voyage-navigation"));
+      directSeek = { id: ++navigationSequence.current, point, from, fadeFrom, started: performance.now(),
+        fadeDuration: 110 * fadeFrom, travelDuration: 750 + 1450 * Math.abs(point - from),
+        revealDelay: point === 0 || point >= finale.sealed ? 140 : 0,
+        revealDuration: point === 0 || point >= finale.sealed ? 480 : 150 };
+      navigationFlight.set({ id: directSeek.id, from, to: point, amount: 0 });
+      setNavigationTarget(point);
+      element.dataset.voyageNavigation = "fade";
+      write(from);
+      schedule();
+    };
+    function revealClearedEndpoint(event: Event) {
+      if (!directSeek || (event as CustomEvent<number>).detail !== directSeek.id) return;
+      directSeek.travelDuration = Math.min(directSeek.travelDuration,
+        Math.max(0, performance.now() - directSeek.started - directSeek.fadeDuration));
+    }
     window.addEventListener("wheel", wheel, { passive: false });
     window.addEventListener("keydown", key);
     window.addEventListener("touchstart", touchStart, { passive: true });
     window.addEventListener("touchmove", touchMove, { passive: false });
-    schedule();
+    window.addEventListener("touchend", touchEnd, { passive: true });
+    window.addEventListener("touchcancel", touchEnd, { passive: true });
+    window.addEventListener("scroll", nativeScroll, { passive: true });
+    window.addEventListener("resize", resized);
+    window.addEventListener("landing-navigate", navigate);
+    window.addEventListener("landing-logo-return", resume);
+    element.addEventListener("voyage-endpoint-clear", revealClearedEndpoint);
+    element.addEventListener("voyage-visibility-change", schedule);
+    mark(); schedule();
     return () => {
-      stopCue();
-      startCueRef.current = () => {};
-      stopCueRef.current = () => {};
-      unsubscribe();
-      trackElement?.removeEventListener(
-        "voyage-endpoint-clear",
-        revealClearedEndpoint,
-      );
+      disposed = true;
       cancelAnimationFrame(frame);
-      seekRef.current = () => {};
-      navigateRef.current = () => {};
-      clearDirectSeek();
+      seekRef.current = () => {}; navigateRef.current = () => {};
       window.removeEventListener("wheel", wheel);
       window.removeEventListener("keydown", key);
       window.removeEventListener("touchstart", touchStart);
       window.removeEventListener("touchmove", touchMove);
+      window.removeEventListener("touchend", touchEnd);
+      window.removeEventListener("touchcancel", touchEnd);
       window.removeEventListener("scroll", nativeScroll);
-      window.removeEventListener("pointerdown", stopCue);
       window.removeEventListener("resize", resized);
-      window.removeEventListener("click", navigation);
       window.removeEventListener("landing-navigate", navigate);
-      window.removeEventListener("landing-logo-return", reenterFinal);
-      if (trackElement) delete trackElement.dataset.scrollCheckpoint;
+      window.removeEventListener("landing-logo-return", resume);
+      element.removeEventListener("voyage-endpoint-clear", revealClearedEndpoint);
+      element.removeEventListener("voyage-visibility-change", schedule);
+      delete element.dataset.voyageNavigation;
+      delete element.dataset.scrollOwner;
     };
-  }, [
-    target,
-    progress,
-    navigationOpacity,
-    navigationFlight,
-    track,
-    enabled,
-  ]);
-  return {
-    progress,
-    prepareSeek,
-    navigateTo,
-    navigationOpacity,
-    navigationTarget,
-    navigationFlight,
-  };
+  }, [target, progress, navigationOpacity, navigationFlight, track, enabled]);
+  return { progress, prepareSeek, navigateTo, navigationOpacity, navigationTarget, navigationFlight };
 }

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:motion": "tsx --test tests/descent-motion.test.ts tests/descent-controller.test.ts tests/curve-trail.test.ts tests/landing-trajectory.test.ts",
+    "test:motion": "tsx --test tests/descent-motion.test.ts tests/descent-controller.test.ts tests/curve-trail.test.ts tests/landing-trajectory.test.ts tests/continuous-scroll.test.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

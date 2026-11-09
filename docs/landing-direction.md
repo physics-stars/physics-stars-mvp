@@ -2,6 +2,10 @@
 
 ## Identidad y contenido
 
+El movimiento actual se prueba con la [variante de scroll continuo](continuous-scroll-experiment.md).
+Sus reglas de sensibilidad, gravedad e iluminación sustituyen las pausas y
+bloqueos históricos descritos más abajo; la identidad y las curvas se conservan.
+
 Una aventura científica nacida de estudiantes que aman la física y han dado clases de repaso. El tono tiene entusiasmo y curiosidad, con una premisa clara para quien llega por primera vez: un videojuego narrativo de física para secundaria. El lore aporta la división científica y las misiones, sin publicar giros de la historia.
 
 La animación presenta cuatro ideas: ponerse en la piel de un científico, descubrir el problema, dar sentido a la física de clase y recibir pistas dentro de la historia. La explicación completa del método y su encaje docente continúa después, seguida del equipo y el piloto. Se distingue el prototipo actual de los informes previstos. Contacto: david.diestre.r@gmail.com.

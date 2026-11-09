@@ -1,6 +1,8 @@
 .track {
   position: relative;
-  height: 730svh;
+  --voyage-header: 76px;
+  /* Twice the original scroll space after the logo is fully formed. */
+  height: calc(730svh + (630svh + var(--voyage-header)) * 0.045);
   scroll-snap-align: end;
   background: #080a18;
   color: #f0f6f6;
@@ -246,6 +248,7 @@
   height: 40px;
   border: 0;
   background: transparent;
+  -webkit-tap-highlight-color: transparent;
   display: grid;
   place-items: center;
 }
@@ -263,8 +266,16 @@
   transform: scale(1.5);
   box-shadow: 0 0 12px #fdd83540;
 }
-.stops button:hover > span {
-  background: #e0c5ff;
+.stops button:focus-visible {
+  outline-color: #fff;
+}
+.stops button:not([aria-current]):focus-visible > span {
+  background: #fff;
+}
+@media (hover: hover) and (pointer: fine) {
+  .stops button:not([aria-current]):hover > span {
+    background: #fff;
+  }
 }
 .destination {
   justify-self: end;
@@ -362,7 +373,7 @@
 }
 @media (max-width: 760px) {
   .track {
-    height: 730svh;
+    --voyage-header: 68px;
   }
   .linearTrack {
     height: auto;

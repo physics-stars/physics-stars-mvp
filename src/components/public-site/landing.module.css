@@ -360,24 +360,6 @@
   left: auto;
   right: 0;
 }
-.energyBar[data-charging="true"] > i::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: -2px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  transform: translateY(-50%);
-  background: #fff4bc;
-  box-shadow:
-    0 0 5px #d5a929,
-    0 0 18px #fdd835;
-}
-.energyBar[data-direction="rtl"] > i::after {
-  right: auto;
-  left: -2px;
-}
 .primaryButton::after {
   content: "";
   position: absolute;

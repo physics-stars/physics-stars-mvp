@@ -313,6 +313,37 @@ export default function StarVoyageScene({
           sphere = box.getBoundingSphere(new THREE.Sphere());
         return sphere.radius + sphere.center.distanceTo(planet.position);
       });
+      const planetCorners = planets.groups.map(planet => {
+        planet.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(planet)
+          .applyMatrix4(new THREE.Matrix4().copy(planet.matrixWorld).invert());
+        return Array.from({ length: 8 }, (_, i) => new THREE.Vector3(
+          i & 1 ? box.max.x : box.min.x,
+          i & 2 ? box.max.y : box.min.y,
+          i & 4 ? box.max.z : box.min.z,
+        ));
+      });
+      const visibilityPoint = new THREE.Vector3();
+      const planetVertices: Array<ThreeTypes.Vector3[] | null> = planets.groups.map(() => null);
+      function silhouetteVertices(index: number) {
+        if (planetVertices[index]) return planetVertices[index]!;
+        const planet = planets.groups[index];
+        const inverse = new THREE.Matrix4().copy(planet.matrixWorld).invert();
+        const unique = new Map<string, ThreeTypes.Vector3>();
+        const point = new THREE.Vector3();
+        planet.traverse(object => {
+          if (!(object instanceof THREE.Mesh) || !object.visible) return;
+          const transform = new THREE.Matrix4().multiplyMatrices(inverse, object.matrixWorld);
+          const positions = object.geometry.getAttribute("position");
+          for (let i = 0; i < positions.count; i++) {
+            point.fromBufferAttribute(positions, i).applyMatrix4(transform);
+            const key = `${point.x.toFixed(5)},${point.y.toFixed(5)},${point.z.toFixed(5)}`;
+            if (!unique.has(key)) unique.set(key, point.clone());
+          }
+        });
+        return planetVertices[index] = Array.from(unique.values());
+      }
+      let previousFullPlanet = -1;
       let ringsEnterAt = finale.start + 0.034;
       let ringsReadyAt = finale.start + 0.049;
       let clearedNavigation = -1;
@@ -376,6 +407,7 @@ export default function StarVoyageScene({
         logo.group.visible = p > ringsEnter && navigationVisibility > 0;
         logo.setClosedRings(p > ringsEnter ? orbitTimeAt(p) : -1);
         logo.setFlatten(seal);
+        let fullPlanet = -1;
         let shown = 0,
           nearest = -1;
         camera.updateMatrixWorld();
@@ -406,6 +438,21 @@ export default function StarVoyageScene({
           if (planet.visible) {
             shown++;
             nearest = index;
+            planet.updateMatrixWorld(true);
+            // Include the stage's real clipping, not just the camera frustum:
+            // portrait canvases extend below their composition for the light.
+            const insideStage = (corner: ThreeTypes.Vector3) => {
+              visibilityPoint.copy(corner).applyMatrix4(planet.matrixWorld).project(camera);
+              const x = hostOffsetX + (visibilityPoint.x * 0.5 + 0.5) * width;
+              const y = hostOffsetY + (-visibilityPoint.y * 0.5 + 0.5) * drawHeight;
+              return visibilityPoint.z >= -1 && visibilityPoint.z <= 1 &&
+                x >= 2 && x <= stageWidth - 2 && y >= 2 && y <= stageHeight - 2;
+            };
+            // Rings can fit while the empty corners of their bounding box do
+            // not. Use cached real vertices only when the fast box test fails.
+            const fullyVisible = planetCorners[index].every(insideStage) ||
+              silhouetteVertices(index).every(insideStage);
+            if (fullyVisible) fullPlanet = index;
           }
         }
         if (
@@ -523,6 +570,7 @@ export default function StarVoyageScene({
           parkPixelX: String(parkedScreenPoints[state.index]?.x ?? ""),
           parkPixelY: String(parkedScreenPoints[state.index]?.y ?? ""),
           visiblePlanets: String(shown),
+          fullyVisiblePlanet: String(fullPlanet),
           parked: String(parked),
           starX: star.position.x.toFixed(5),
           starY: star.position.y.toFixed(5),
@@ -545,6 +593,10 @@ export default function StarVoyageScene({
           ringsEnter: ringsEnterAt.toFixed(6),
           ringsReady: ringsReadyAt.toFixed(6),
         });
+        if (fullPlanet !== previousFullPlanet) {
+          previousFullPlanet = fullPlanet;
+          host!.closest("#idea")?.dispatchEvent(new Event("voyage-visibility-change"));
+        }
         loadingState("ready");
         if (!focusSettled) requestRender();
       }
@@ -557,9 +609,12 @@ export default function StarVoyageScene({
         const range = document.createRange();
         range.selectNodeContents(heading);
         const bounds = range.getBoundingClientRect();
-        return bounds.width > 0 && bounds.height > 0
-          ? bounds
-          : heading.getBoundingClientRect();
+        const box = bounds.width > 0 && bounds.height > 0 ? bounds : heading.getBoundingClientRect();
+        const transform = heading.closest<HTMLElement>("[data-voyage-copy]")?.style.transform;
+        const offset = transform && transform !== "none" ? new DOMMatrixReadOnly(transform).m42 : 0;
+        // The text drifts below its original baseline; its light anchor must
+        // use that baseline rather than following a transient spring position.
+        return new DOMRect(box.x, box.y - offset, box.width, box.height);
       }
       function measureParkPoints(rect: DOMRect) {
         const stage = host!.closest<HTMLElement>("[data-voyage-stage]");

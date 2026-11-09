@@ -2,6 +2,10 @@
 
 ## Dirección
 
+Actualización del movimiento: [variante de scroll continuo](continuous-scroll-experiment.md).
+Esta variante sustituye los bloqueos, pausas y tiempos de espera documentados
+en el rework original.
+
 La identidad nace de una idea concreta: antes de aplicar una fórmula, alguien
 tiene que descubrir qué pregunta quiere resolver. El origen del equipo dando
 clases de repaso conecta esa idea con la pregunta que conocen: «¿y esto para qué sirve?».

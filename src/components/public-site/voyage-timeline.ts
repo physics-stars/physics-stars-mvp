@@ -32,8 +32,8 @@ export const finale = {
 };
 export const waypointStops = [
   0,
-  ...visits.map((visit) => (visit.textIn + visit.textOut) / 2),
-  1,
+  ...visits.map((visit) => (visit.textIn + 0.004 + visit.textOut) / 2),
+  (finale.sealed + 1) / 2,
 ];
 
 export function orbitAmount(progress: number) {
