@@ -52,7 +52,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     if (sections.length !== 3 || bars.length !== 2 || !vessel || !starNode || !maskNode) return;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const mobileInput = matchMedia(MOBILE_MOTION_QUERY);
-    const speed = () => motionSpeed(mobileInput.matches);
+    const speed = () => motionSpeed(mobileInput.matches, "slides");
     const inputSpeed = () => slideScrollSpeed * speed();
     const curveTrail = new CurveTrail(), touch = new TouchMomentum();
     const sides: LightSide[] = ["left", "left", "right"];
@@ -368,7 +368,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         // Finish the title's rise before releasing the sticky scene. Both
         // parts meet with zero velocity and acceleration at that boundary.
         const readingEnd = from < geometry.logoEnd && to > geometry.logoEnd ? geometry.logoEnd : from;
-        const readingDuration = animated && readingEnd - from > 0.5 ? 400 / speed() : 0;
+        const readingDuration = animated && readingEnd - from > 0.5 ? 400 / motionSpeed(mobileInput.matches, "planet-text") : 0;
         const pageDuration = animated && Math.abs(to - readingEnd) > 0.5 ? 850 / speed() : 0;
         const duration = readingDuration + pageDuration;
         let started: number | null = null;

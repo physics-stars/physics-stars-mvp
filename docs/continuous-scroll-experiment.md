@@ -13,7 +13,12 @@ espacio previo y la gravedad mantiene su velocidad independiente.
 
 La velocidad global se configura únicamente en
 [`motion-settings.ts`](../src/components/public-site/motion-settings.ts):
-`DESKTOP_SPEED_MULTIPLIER = 1.25` y `MOBILE_SPEED_MULTIPLIER = 1.25`.
+`DESKTOP_SPEED_MULTIPLIER = 1.25` se conserva para PC.
+En móvil se separan `MOBILE_TRAVEL_SPEED_MULTIPLIER = 1` (viajes de luz y
+animación del logo), `MOBILE_PLANET_TEXT_SPEED_MULTIPLIER = 2` (lecturas junto
+a los planetas y texto final de Physics Stars) y `MOBILE_SLIDES_SPEED_MULTIPLIER = 2`
+(apartados inferiores). El inicio usa el factor del viaje; la transición desde
+el logo usa el factor de textos al terminar su lectura y el de slides al bajar.
 El valor 1 representa el ritmo base de escritorio. Los multiplicadores se
 aplican a sensibilidad, velocidades, suavizado, navegación, fundidos,
 destellos y animaciones CSS públicas. Los tiempos se dividen por el factor y
@@ -25,6 +30,11 @@ Los tiempos de red y de carga real de recursos no se modifican.
 La gravedad conserva su ritmo original y no depende de estos multiplicadores.
 Su destino en los textos planetarios es el 80 % del tramo plenamente visible,
 configurable con `PLANET_READING_ATTRACTION_POINT = 0.8`; no cambia su velocidad.
+Cuando los anillos blanco y morado caben completos dentro del encuadre, el
+cierre también atrae hasta el logo formado y su texto completo, sin pasar a la
+sección inferior. Espera 550 ms sin interacción y avanza sobre una curva suave
+de 2400 ms, independiente del multiplicador global. Un gesto nuevo lo cancela.
+Ambos tiempos se editan con `LOGO_GRAVITY_DELAY_MS` y `LOGO_GRAVITY_DURATION_MS`.
 En móvil, al soltar el dedo se mantiene una velocidad que decae progresivamente
 en el mismo controlador de scroll, en vez de añadir un único impulso recortado.
 Un toque o gesto nuevo cancela esa inercia. Continúa al pasar entre el viaje y

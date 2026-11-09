@@ -330,6 +330,17 @@ export default function StarVoyageScene({
       });
       const visibilityPoint = new THREE.Vector3();
       const visibilityProjection = new THREE.Matrix4();
+      const ringVisibilityProjection = new THREE.Matrix4();
+      logo.group.updateMatrixWorld(true);
+      const logoInverse = new THREE.Matrix4().copy(logo.group.matrixWorld).invert();
+      const logoRingCorners = [logo.purple, logo.white].flatMap(ring => {
+        const box = new THREE.Box3().setFromObject(ring).applyMatrix4(logoInverse);
+        // Logo shaders project every outline on its original SVG plane.
+        return Array.from({ length: 4 }, (_, index) => new THREE.Vector3(
+          index & 1 ? box.max.x : box.min.x,
+          index & 2 ? box.max.y : box.min.y, 0,
+        ));
+      });
       let visibilityRevision = 0;
       const visibilityCache = planets.groups.map(() => ({
         cameraX: NaN, rotation: NaN, scale: NaN, revision: -1, full: false,
@@ -354,6 +365,7 @@ export default function StarVoyageScene({
         return planetVertices[index] = Array.from(unique.values());
       }
       let previousFullPlanet = -1;
+      let previousLogoGravityReady = false;
       let ringsEnterAt = finale.start + 0.034;
       let ringsReadyAt = finale.start + 0.049;
       let clearedNavigation = -1;
@@ -613,7 +625,24 @@ export default function StarVoyageScene({
           ringsEnter: ringsEnterAt.toFixed(6),
           ringsReady: ringsReadyAt.toFixed(6),
         });
-        if (fullPlanet !== previousFullPlanet) {
+        let logoGravityReady = false;
+        if (logo.group.visible && navigationVisibility > 0 && !flight) {
+          logo.group.updateMatrix();
+          ringVisibilityProjection.multiplyMatrices(projection, logo.group.matrix);
+          logoGravityReady = logoRingCorners.every(corner => {
+            visibilityPoint.copy(corner).applyMatrix4(ringVisibilityProjection);
+            const x = hostOffsetX + (visibilityPoint.x * 0.5 + 0.5) * width;
+            const y = hostOffsetY + (-visibilityPoint.y * 0.5 + 0.5) * drawHeight;
+            return visibilityPoint.z >= -1 && visibilityPoint.z <= 1 &&
+              x >= 2 && x <= stageWidth - 2 && y >= 2 && y <= stageHeight - 2;
+          });
+        }
+        const logoVisibilityChanged = logoGravityReady !== previousLogoGravityReady;
+        if (logoVisibilityChanged) {
+          previousLogoGravityReady = logoGravityReady;
+          canvas!.dataset.logoGravityReady = String(logoGravityReady);
+        }
+        if (fullPlanet !== previousFullPlanet || logoVisibilityChanged) {
           previousFullPlanet = fullPlanet;
           canvas!.dataset.fullyVisiblePlanet = String(fullPlanet);
           host!.closest("#idea")?.dispatchEvent(new Event("voyage-visibility-change"));

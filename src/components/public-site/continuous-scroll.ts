@@ -118,18 +118,19 @@ export class PlanetGravity {
   private center: number | null = null;
   private from = 0;
   private elapsed = 0;
+  constructor(private readonly delay = planetGravityDelay, private readonly duration = planetGravityDuration) {}
   get destination() { return this.center; }
   reset() { this.center = null; this.elapsed = 0; }
   target(actual: number, requested: number, center: number | null, elapsed: number, quietFor: number, speedMultiplier = 1) {
-    if (quietFor * speedMultiplier < planetGravityDelay) { this.reset(); return requested; }
+    if (quietFor * speedMultiplier < this.delay) { this.reset(); return requested; }
     // Once captured, a visibility measurement cannot restart the attraction.
     const destination = center ?? this.center;
     if (destination === null) return requested;
     if (this.center !== destination) {
       this.center = destination; this.from = actual; this.elapsed = 0;
     }
-    this.elapsed = Math.min(planetGravityDuration, this.elapsed + Math.max(0, Math.min(32, elapsed)) * speedMultiplier);
-    const desired = this.from + (destination - this.from) * smoothRange(0, planetGravityDuration, this.elapsed);
+    this.elapsed = Math.min(this.duration, this.elapsed + Math.max(0, Math.min(32, elapsed)) * speedMultiplier);
+    const desired = this.from + (destination - this.from) * smoothRange(0, this.duration, this.elapsed);
     const lead = 0.01 * speedMultiplier;
     return Math.max(actual - lead, Math.min(actual + lead, desired));
   }

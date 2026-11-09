@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useMotionValue, type MotionValue } from "framer-motion";
-import { finale, smoothRange } from "./voyage-timeline";
+import { finale, smoothRange, visits } from "./voyage-timeline";
 import { scrollHandoffEvent, type ScrollHandoff } from "./descent-controller";
 import { scrollInputTarget, scrollSensitivity, followVoyage, PlanetGravity, planetReadingCenter, TouchMomentum,
   voyageInputLead, voyageProgressAt, voyageScrollDistance, voyageScrollLength } from "./continuous-scroll";
-import { MOBILE_MOTION_QUERY, motionSpeed } from "./motion-settings";
+import { MOBILE_MOTION_QUERY, motionSpeed, LOGO_GRAVITY_DELAY_MS, LOGO_GRAVITY_DURATION_MS } from "./motion-settings";
 
 export type VoyageNavigationFlight = { id: number; from: number; to: number; amount: number };
 
@@ -34,8 +34,15 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     let lastInputAt = -Infinity, lastWrittenY = NaN;
     const touch = new TouchMomentum();
     const gravity = new PlanetGravity();
+    const logoGravity = new PlanetGravity(LOGO_GRAVITY_DELAY_MS, LOGO_GRAVITY_DURATION_MS);
+    let logoReadyAt: number | null = null;
+    function resetGravity() {
+      gravity.reset(); logoGravity.reset(); logoReadyAt = null;
+    }
     const mobileInput = matchMedia(MOBILE_MOTION_QUERY);
-    const inputSpeed = () => motionSpeed(mobileInput.matches);
+    const inputSpeed = (point = progress.get()) => motionSpeed(mobileInput.matches,
+      point >= finale.sealed || visits.some(visit => point >= visit.parked && point <= visit.departure)
+        ? "planet-text" : "travel");
     let touchY: number | null = null;
     function measureBounds() {
       const start = element!.getBoundingClientRect().top + scrollY - headerRef.current;
@@ -135,10 +142,19 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       if (inertia) consume(inertia, undefined, true);
       const current = progress.get();
       const center = planetReadingCenter(current, requested, visiblePlanet());
-      requested = gravity.target(current, requested, center, dt, time - lastInputAt);
-      const attracting = gravity.destination !== null;
+      const logoReady = current >= finale.start && current < 1 && requested <= 1 &&
+        touchY === null && !touch.coasting &&
+        element!.querySelector<HTMLCanvasElement>("canvas[data-engine]")?.dataset.logoGravityReady === "true";
+      if (logoReady) logoReadyAt ??= time;
+      else if (logoGravity.destination === null) logoReadyAt = null;
+      const logoCenter = logoReady || logoGravity.destination !== null ? 1 : null;
+      const activeGravity = logoCenter !== null ? logoGravity : gravity;
+      if (logoCenter !== null) gravity.reset();
+      const quietFor = logoCenter !== null ? Math.min(time - lastInputAt, time - (logoReadyAt ?? time)) : time - lastInputAt;
+      requested = activeGravity.target(current, requested, logoCenter ?? center, dt, quietFor);
+      const attracting = activeGravity.destination !== null;
       if (attracting)
-        element!.dataset.voyageGravity = gravity.destination!.toFixed(6);
+        element!.dataset.voyageGravity = activeGravity.destination!.toFixed(6);
       else delete element!.dataset.voyageGravity;
       if (current >= 1 - 0.0000001 && requested > 1) { handoff(); return; }
       const destination = Math.max(0, requested);
@@ -146,7 +162,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       if (Math.abs(delta) < 0.0000001 && Math.abs(velocity) < 0.000001) {
         velocity = 0;
         write(destination);
-        const attractionCenter = gravity.destination ?? center;
+        const attractionCenter = activeGravity.destination ?? logoCenter ?? center;
         if (touch.coasting || (attractionCenter !== null && Math.abs(requested - attractionCenter) > 0.0000001)) schedule();
         return;
       }
@@ -173,7 +189,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
         delta / b.length, 0, voyageScrollLength + descentLength / b.length, lead,
         scrollSensitivity * inputSpeed()));
       lastInputAt = performance.now();
-      gravity.reset();
+      resetGravity();
       delete element!.dataset.voyageGravity;
       schedule();
     }
@@ -204,7 +220,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     }
     function touchStart(event: TouchEvent) {
       if (touch.coasting && !nativeExit) { requested = progress.get(); velocity = 0; }
-      if (mobileInput.matches && !nativeExit) { lastInputAt = performance.now(); gravity.reset(); }
+      if (!nativeExit) { lastInputAt = performance.now(); resetGravity(); }
       touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
       touch.start(performance.now());
     }
@@ -226,7 +242,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       touch.cancelCoast();
       if (mobileInput.matches) touch.resumeCoast(detail?.inertiaVelocity ?? 0);
       followingSectionScroll = false;
-      gravity.reset();
+      resetGravity();
       clearDirectSeek();
       nativeExit = false;
       const delta = detail?.delta ?? 0;
@@ -239,7 +255,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     }
     function navigate(event: Event) {
       touch.cancelCoast();
-      gravity.reset();
+      resetGravity();
       clearDirectSeek();
       const detail = (event as CustomEvent<string | { id: string; behavior?: string }>).detail;
       const home = (typeof detail === "string" ? detail : detail.id) === "idea";
@@ -273,7 +289,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       progress.set(Math.max(0, Math.min(1, p)));
       velocity = 0;
       lastInputAt = performance.now();
-      gravity.reset();
+      resetGravity();
       schedule();
     }
     function resized() {
@@ -284,22 +300,23 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     seekRef.current = (point) => {
       touch.cancelCoast();
       followingSectionScroll = false;
-      gravity.reset();
+      resetGravity();
       clearDirectSeek(); nativeExit = false; requested = point; velocity = 0;
       write(point); schedule();
     };
     navigateRef.current = (point) => {
       touch.cancelCoast();
       followingSectionScroll = false;
-      gravity.reset();
+      resetGravity();
       if (directSeek?.point === point) return;
       const from = progress.get(), fadeFrom = navigationOpacity.get();
       nativeExit = false; requested = point; velocity = 0; previousTime = 0;
       window.dispatchEvent(new Event("landing-voyage-navigation"));
       directSeek = { id: ++navigationSequence.current, point, from, fadeFrom, started: performance.now(),
-        fadeDuration: 110 * fadeFrom / inputSpeed(), travelDuration: (750 + 1450 * Math.abs(point - from)) / inputSpeed(),
-        revealDelay: point === 0 || point >= finale.sealed ? 140 / inputSpeed() : 0,
-        revealDuration: (point === 0 || point >= finale.sealed ? 480 : 150) / inputSpeed() };
+        fadeDuration: 110 * fadeFrom / inputSpeed(from),
+        travelDuration: (750 + 1450 * Math.abs(point - from)) / motionSpeed(mobileInput.matches),
+        revealDelay: point === 0 || point >= finale.sealed ? 140 / motionSpeed(mobileInput.matches) : 0,
+        revealDuration: (point === 0 || point >= finale.sealed ? 480 : 150) / inputSpeed(point) };
       navigationFlight.set({ id: directSeek.id, from, to: point, amount: 0 });
       setNavigationTarget(point);
       element.dataset.voyageNavigation = "fade";
