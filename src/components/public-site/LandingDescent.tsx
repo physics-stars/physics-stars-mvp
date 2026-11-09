@@ -14,8 +14,9 @@ import styles from "./landing.module.css";
 import { vesselBodyPath } from "./GlassVessel";
 import { CurveTrail, type TrailCursor } from "./curve-trail";
 import { followScroll, scrollHandoffEvent, type ScrollHandoff } from "./descent-controller";
-import { scrollInputTarget, gravityTarget, maximumInputLag, slideGravityDelay, slideScrollSpeed, TouchMomentum } from "./continuous-scroll";
+import { scrollInputTarget, scrollSensitivity, gravityTarget, maximumInputLag, slideGravityDelay, slideScrollSpeed, TouchMomentum } from "./continuous-scroll";
 import { barIllumination, createDescentTimeline, type DescentTimeline, type DescentGeometry } from "./continuous-descent";
+import { MOBILE_MOTION_QUERY, motionSpeed } from "./motion-settings";
 
 const subscribeClient = () => () => {};
 /** One continuous scroll coordinate drives camera, light and illumination. */
@@ -50,6 +51,9 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     const voyage = document.getElementById("idea")!;
     if (sections.length !== 3 || bars.length !== 2 || !vessel || !starNode || !maskNode) return;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const mobileInput = matchMedia(MOBILE_MOTION_QUERY);
+    const speed = () => motionSpeed(mobileInput.matches);
+    const inputSpeed = () => slideScrollSpeed * speed();
     const curveTrail = new CurveTrail(), touch = new TouchMomentum();
     const sides: LightSide[] = ["left", "left", "right"];
     let geometry: DescentGeometry, timeline: DescentTimeline;
@@ -155,8 +159,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       selectTravelTimeline();
       if (driving && animated) {
         const center = timeline.gravityCenter(requested);
-        requested = gravityTarget(position, requested, center, elapsed, time - lastInputAt, 64);
-        position = followScroll(position, requested, elapsed, slideScrollSpeed);
+        requested = gravityTarget(position, requested, center, elapsed, time - lastInputAt, 64, speed());
+        position = followScroll(position, requested, elapsed, inputSpeed(), speed());
         if (position <= 0 && requested < 0) {
           driving = false;
           const delta = requested;
@@ -166,7 +170,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
           lastWrittenY = timeline.at(position).page;
           window.scrollTo({ top: lastWrittenY, behavior: "instant" });
         }
-        if (center !== null && time - lastInputAt >= slideGravityDelay)
+        if (center !== null && (time - lastInputAt) * speed() >= slideGravityDelay)
           container.dataset.gravityTarget = center.toFixed(3);
         else delete container.dataset.gravityTarget;
       }
@@ -225,12 +229,12 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         Math.abs(scrollY - (g.sections[0].start + g.sections[0].end) / 2) < 80;
       if (!nearFlask) flashed = false;
       if (nearFlask && !flashed) { flashed = true; flashAt = time; }
-      const flashAge = time - flashAt;
+      const flashAge = (time - flashAt) * speed();
       const flash = animated && nearFlask && flashAge < 300 ? Math.sin(Math.PI * flashAge / 300) ** 2 : 0;
       if (flash > 0) container.dataset.flaskFlash = "true";
       else delete container.dataset.flaskFlash;
       const shown = animated && rootBounds.top < g.height && rootBounds.bottom > g.header;
-      const trace = curveTrail.update(shown && alpha > 0.01 ? cursor : null, time);
+      const trace = curveTrail.update(shown && alpha > 0.01 ? cursor : null, time, speed());
       svg.style.clipPath = `inset(${Math.max(g.header, rootBounds.top)}px 0 ${Math.max(0, g.height - rootBounds.bottom)}px 0)`;
       maskNode.setAttribute("transform", `translate(${flaskBounds.left} ${flaskBounds.top - scrollY}) scale(${flaskBounds.width / 420} ${flaskBounds.height / 290})`);
       starNode.setAttribute("transform", `translate(${point.x} ${point.y})`);
@@ -264,7 +268,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       travelDirection = Math.sign(delta);
       selectTravelTimeline();
       requested = scrollInputTarget(position, requested, delta, -voyage.offsetHeight, timeline.length,
-        slideScrollSpeed * maximumInputLag);
+        inputSpeed() * maximumInputLag, scrollSensitivity * speed());
       lastInputAt = performance.now();
       schedule();
     }
@@ -275,7 +279,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       position = timeline.positionAtPage(scrollY);
       travelDirection = Math.sign(delta) || travelDirection;
       selectTravelTimeline();
-      const lead = slideScrollSpeed * maximumInputLag;
+      const lead = inputSpeed() * maximumInputLag;
       requested = Math.max(-voyage.offsetHeight, position - lead,
         Math.min(timeline.length, position + lead, position + delta));
       lastInputAt = quietSince ?? performance.now();
@@ -344,8 +348,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         // Finish the title's rise before releasing the sticky scene. Both
         // parts meet with zero velocity and acceleration at that boundary.
         const readingEnd = from < geometry.logoEnd && to > geometry.logoEnd ? geometry.logoEnd : from;
-        const readingDuration = animated && readingEnd - from > 0.5 ? 400 : 0;
-        const pageDuration = animated && Math.abs(to - readingEnd) > 0.5 ? 850 : 0;
+        const readingDuration = animated && readingEnd - from > 0.5 ? 400 / speed() : 0;
+        const pageDuration = animated && Math.abs(to - readingEnd) > 0.5 ? 850 / speed() : 0;
         const duration = readingDuration + pageDuration;
         let started: number | null = null;
         scrollingToSection = true;

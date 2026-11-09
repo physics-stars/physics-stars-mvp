@@ -19,7 +19,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  transition: opacity 0.18s ease;
+  transition: opacity calc(0.18s / var(--public-motion-speed, 1)) ease;
 }
 .stage[data-scene-state="loading"] .cosmos {
   opacity: 0;
@@ -124,8 +124,8 @@
   font-size: 13px;
   font-weight: 550;
   transition:
-    background 0.2s,
-    transform 0.2s;
+    background calc(0.2s / var(--public-motion-speed, 1)),
+    transform calc(0.2s / var(--public-motion-speed, 1));
 }
 .departure:hover {
   background: #ffe87e;
@@ -202,7 +202,7 @@
   outline-offset: 5px;
 }
 .bottomControls {
-  transition: opacity 0.3s ease;
+  transition: opacity calc(0.3s / var(--public-motion-speed, 1)) ease;
   position: absolute;
   left: 4.5vw;
   right: 4.5vw;
@@ -265,8 +265,8 @@
   border-radius: 50%;
   background: #676279;
   transition:
-    background 0.2s,
-    transform 0.2s;
+    background calc(0.2s / var(--public-motion-speed, 1)),
+    transform calc(0.2s / var(--public-motion-speed, 1));
 }
 .stops button[aria-current] > span {
   background: #fdd835;
@@ -665,7 +665,7 @@
   position: relative;
   width: 88px;
   height: 88px;
-  animation: lightLoadingOrbit 1.65s linear infinite;
+  animation: lightLoadingOrbit calc(1.65s / var(--public-motion-speed, 1)) linear infinite;
 }
 .loadingOrbit::before {
   content: "";

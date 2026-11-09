@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import Image from "next/image";
@@ -16,6 +17,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
 import { languageNames, locales, publicCopy, type Locale } from "./copy";
 import styles from "./public.module.css";
+import { usePublicMotionSpeed } from "./use-public-motion-speed";
 
 const brandFont = Exo_2({
   subsets: ["latin"],
@@ -56,6 +58,7 @@ export function PublicShell({
   login?: boolean;
 }) {
   const t = publicCopy[locale];
+  const motionSpeed = usePublicMotionSpeed();
   useEffect(() => {
     const previous = document.documentElement.lang;
     const previousBackground = document.body.style.backgroundColor;
@@ -72,6 +75,7 @@ export function PublicShell({
       <div
         className={`${brandFont.variable} ${readingFont.variable} ${displayFont.variable} ${styles.site} ${login ? styles.loginSite : ""}`}
         lang={locale}
+        style={{ "--public-motion-speed": motionSpeed } as CSSProperties}
       >
         <a className={styles.skip} href="#main">
           {t.nav.skip}

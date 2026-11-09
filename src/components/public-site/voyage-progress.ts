@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { useMotionValue, type MotionValue } from "framer-motion";
 import { finale, smoothRange } from "./voyage-timeline";
 import { scrollHandoffEvent, type ScrollHandoff } from "./descent-controller";
-import { scrollInputTarget, followVoyage, PlanetGravity, planetReadingCenter, TouchMomentum,
+import { scrollInputTarget, scrollSensitivity, followVoyage, PlanetGravity, planetReadingCenter, TouchMomentum,
   voyageInputLead, voyageProgressAt, voyageScrollDistance, voyageScrollLength } from "./continuous-scroll";
+import { MOBILE_MOTION_QUERY, motionSpeed } from "./motion-settings";
 
 export type VoyageNavigationFlight = { id: number; from: number; to: number; amount: number };
 
@@ -33,6 +34,8 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     let lastInputAt = -Infinity, lastWrittenY = NaN;
     const touch = new TouchMomentum();
     const gravity = new PlanetGravity();
+    const mobileInput = matchMedia(MOBILE_MOTION_QUERY);
+    const inputSpeed = () => motionSpeed(mobileInput.matches);
     let touchY: number | null = null;
     function measureBounds() {
       const start = element!.getBoundingClientRect().top + scrollY - headerRef.current;
@@ -128,7 +131,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       previousTime = time;
       const current = progress.get();
       const center = planetReadingCenter(current, requested, visiblePlanet());
-      requested = gravity.target(current, requested, center, dt, time - lastInputAt);
+      requested = gravity.target(current, requested, center, dt, time - lastInputAt, inputSpeed());
       const attracting = gravity.destination !== null;
       if (attracting)
         element!.dataset.voyageGravity = gravity.destination!.toFixed(6);
@@ -147,7 +150,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       // flight/reading speed caps would brake and accelerate it at boundaries.
       const next = attracting
         ? { position: destination, unbounded: destination, velocity: (destination - current) / (dt / 1000) }
-        : followVoyage(current, destination, velocity, dt);
+        : followVoyage(current, destination, velocity, dt, inputSpeed());
       velocity = next.velocity;
       if (next.unbounded >= 1 && requested > 1) { handoff(); return; }
       write(next.position);
@@ -160,9 +163,10 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       const b = bounds();
       const descentLength = Number(document.querySelector<HTMLElement>("[data-descent-root]")?.dataset.scrollLength) || innerHeight * 4;
       const current = progress.get();
-      const lead = voyageInputLead(current);
+      const lead = voyageInputLead(current, inputSpeed());
       requested = voyageProgressAt(scrollInputTarget(voyageScrollDistance(current), voyageScrollDistance(requested),
-        delta / b.length, 0, voyageScrollLength + descentLength / b.length, lead));
+        delta / b.length, 0, voyageScrollLength + descentLength / b.length, lead,
+        scrollSensitivity * inputSpeed()));
       lastInputAt = performance.now();
       gravity.reset();
       delete element!.dataset.voyageGravity;
@@ -275,9 +279,9 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       nativeExit = false; requested = point; velocity = 0; previousTime = 0;
       window.dispatchEvent(new Event("landing-voyage-navigation"));
       directSeek = { id: ++navigationSequence.current, point, from, fadeFrom, started: performance.now(),
-        fadeDuration: 110 * fadeFrom, travelDuration: 750 + 1450 * Math.abs(point - from),
-        revealDelay: point === 0 || point >= finale.sealed ? 140 : 0,
-        revealDuration: point === 0 || point >= finale.sealed ? 480 : 150 };
+        fadeDuration: 110 * fadeFrom / inputSpeed(), travelDuration: (750 + 1450 * Math.abs(point - from)) / inputSpeed(),
+        revealDelay: point === 0 || point >= finale.sealed ? 140 / inputSpeed() : 0,
+        revealDuration: (point === 0 || point >= finale.sealed ? 480 : 150) / inputSpeed() };
       navigationFlight.set({ id: directSeek.id, from, to: point, amount: 0 });
       setNavigationTarget(point);
       element.dataset.voyageNavigation = "fade";

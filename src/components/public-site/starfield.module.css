@@ -17,7 +17,7 @@
   height: 2px;
   background: #f4f5ff;
   box-shadow: 0 0 3px #f4f5ff90, 0 0 8px #c4b3ec38;
-  animation: stellarGlow var(--twinkle-period) ease-in-out var(--twinkle-delay) infinite;
+  animation: stellarGlow calc(var(--twinkle-period) / var(--public-motion-speed, 1)) ease-in-out calc(var(--twinkle-delay) / var(--public-motion-speed, 1)) infinite;
 }
 .glint::before,
 .glint::after {
@@ -27,7 +27,7 @@
   top: 50%;
   opacity: 0.12;
   transform: translate(-50%, -50%) scale(0.55);
-  animation: stellarGlint var(--twinkle-period) ease-in-out var(--twinkle-delay) infinite;
+  animation: stellarGlint calc(var(--twinkle-period) / var(--public-motion-speed, 1)) ease-in-out calc(var(--twinkle-delay) / var(--public-motion-speed, 1)) infinite;
 }
 .glint::before {
   width: 14px;

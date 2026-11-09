@@ -65,21 +65,21 @@ export function voyageProgressAt(distance: number) {
   return 1 + remaining;
 }
 
-export function voyageInputLead(progress: number) {
+export function voyageInputLead(progress: number, speedMultiplier = 1) {
   const reading = scrollSegments.some(segment => segment.scale !== voyageFlightScale &&
     progress >= segment.from && progress <= segment.to);
   const lag = reading ? maximumInputLag : maximumVoyageInputLag;
-  return voyageScrollDistance(progress + voyageSpeedLimit(progress) * lag / 1000) - voyageScrollDistance(progress);
+  return voyageScrollDistance(progress + voyageSpeedLimit(progress) * speedMultiplier * lag / 1000) - voyageScrollDistance(progress);
 }
 
 /** Smaller gestures, with only a short response window ahead of the visible
  * position. Fast input is compressed here, never stored to play seconds later. */
 export function scrollInputTarget(actual: number, requested: number, delta: number,
-  min: number, max: number, maximumLead: number) {
+  min: number, max: number, maximumLead: number, sensitivity = scrollSensitivity) {
   const gap = requested - actual;
   const base = gap * delta < 0 ? actual : requested;
   return Math.max(min, actual - maximumLead,
-    Math.min(max, actual + maximumLead, base + delta * scrollSensitivity));
+    Math.min(max, actual + maximumLead, base + delta * sensitivity));
 }
 
 export function nearestCenter(value: number, centers: readonly number[]) {
@@ -90,14 +90,15 @@ export function nearestCenter(value: number, centers: readonly number[]) {
 /** Gravity changes a resting destination gently; it never consumes input or
  * pulls a long, still-travelling impulse back to a section it has passed. */
 export function gravityTarget(actual: number, requested: number, center: number | null,
-  elapsed: number, quietFor: number, captureDistance: number) {
+  elapsed: number, quietFor: number, captureDistance: number, speedMultiplier = 1) {
+  quietFor *= speedMultiplier;
   if (center === null || quietFor < slideGravityDelay || Math.abs(requested - actual) > captureDistance)
     return requested;
   const gap = center - requested;
   const epsilon = Math.min(0.01, captureDistance / 10000);
   const attraction = smoothRange(slideGravityDelay, slideGravityDelay + 320, quietFor);
   return Math.abs(gap) < epsilon ? center
-    : requested + gap * -Math.expm1(-Math.min(32, elapsed) * attraction / 420);
+    : requested + gap * -Math.expm1(-Math.min(32, elapsed) * speedMultiplier * attraction / 420);
 }
 
 export function planetReadingCenter(actual: number, requested: number, visiblePlanet: number | null = null) {
@@ -116,17 +117,18 @@ export class PlanetGravity {
   private elapsed = 0;
   get destination() { return this.center; }
   reset() { this.center = null; this.elapsed = 0; }
-  target(actual: number, requested: number, center: number | null, elapsed: number, quietFor: number) {
-    if (quietFor < planetGravityDelay) { this.reset(); return requested; }
+  target(actual: number, requested: number, center: number | null, elapsed: number, quietFor: number, speedMultiplier = 1) {
+    if (quietFor * speedMultiplier < planetGravityDelay) { this.reset(); return requested; }
     // Once captured, a visibility measurement cannot restart the attraction.
     const destination = center ?? this.center;
     if (destination === null) return requested;
     if (this.center !== destination) {
       this.center = destination; this.from = actual; this.elapsed = 0;
     }
-    this.elapsed = Math.min(planetGravityDuration, this.elapsed + Math.max(0, Math.min(32, elapsed)));
+    this.elapsed = Math.min(planetGravityDuration, this.elapsed + Math.max(0, Math.min(32, elapsed)) * speedMultiplier);
     const desired = this.from + (destination - this.from) * smoothRange(0, planetGravityDuration, this.elapsed);
-    return Math.max(actual - 0.01, Math.min(actual + 0.01, desired));
+    const lead = 0.01 * speedMultiplier;
+    return Math.max(actual - lead, Math.min(actual + lead, desired));
   }
 }
 
@@ -186,11 +188,11 @@ export function voyageSpeedLimit(p: number) {
 /** Follow the full queued destination even beyond the voyage. Clamping the
  * spring's destination to 1 would brake before passing the remaining inertia
  * to the next section. Only the displayed position is clamped. */
-export function followVoyage(current: number, requested: number, velocity: number, elapsed: number) {
+export function followVoyage(current: number, requested: number, velocity: number, elapsed: number, speedMultiplier = 1) {
   const seconds = Math.max(0, Math.min(32, elapsed)) / 1000;
   const delta = requested - current;
-  const raw = current + delta * -Math.expm1(-seconds / 0.045);
-  const maximum = voyageSpeedLimit(current);
+  const raw = current + delta * -Math.expm1(-seconds * speedMultiplier / 0.045);
+  const maximum = voyageSpeedLimit(current) * speedMultiplier;
   const unbounded = current + Math.max(-maximum * seconds, Math.min(maximum * seconds, raw - current));
   return { position: Math.max(0, Math.min(1, unbounded)), unbounded,
     velocity: seconds ? (unbounded - current) / seconds : velocity };

@@ -6,6 +6,17 @@ solo modifica el movimiento de la landing.
 
 ## Respuesta al gesto
 
+La velocidad global se configura únicamente en
+[`motion-settings.ts`](../src/components/public-site/motion-settings.ts):
+`DESKTOP_SPEED_MULTIPLIER = 2` y `MOBILE_SPEED_MULTIPLIER = 5`.
+El valor 1 representa el ritmo base de escritorio. Los multiplicadores se
+aplican a sensibilidad, velocidades, suavizado, gravedad, navegación, fundidos,
+destellos y animaciones CSS públicas. Los tiempos se dividen por el factor y
+las velocidades se multiplican. Se mantienen las curvas y proporciones del
+recorrido, incluida la lectura final a 1,2 veces la media de los planetas.
+La detección móvil incluye pantallas de hasta 760 px o puntero táctil principal.
+Los tiempos de red y de carga real de recursos no se modifican.
+
 Actualización del recorrido: los vuelos entre planetas y la formación del logo
 usan el 35 % de su distancia anterior. La aparición, lectura y salida de cada
 texto planetario conservan toda su distancia y velocidad originales, igual que

@@ -15,6 +15,7 @@ import { usePublicLocale } from "./PublicShell";
 import { voyageCopy } from "./voyage-copy";
 import { finale, visits, voyageState, waypointStops } from "./voyage-timeline";
 import { useVoyageProgress } from "./voyage-progress";
+import { usePublicMotionSpeed } from "./use-public-motion-speed";
 import { finalTextOffset, finalTextOpacity, planetTextOffset, planetTextOpacity, voyageScrollDistance, voyageScrollLength } from "./continuous-scroll";
 import { VoyageLoader, type VoyageSceneState } from "./VoyageLoader";
 import { VoyageStarfield } from "./VoyageStarfield";
@@ -48,6 +49,7 @@ function serverHeader() {
 }
 
 export function StarVoyage() {
+  const motionSpeed = usePublicMotionSpeed();
   const locale = usePublicLocale(),
     copy = voyageCopy[locale];
   const track = useRef<HTMLElement>(null),
@@ -219,7 +221,7 @@ export function StarVoyage() {
                   y: logoFormed && navigationTarget === null ? 0 : 6,
                 }}
                 transition={{
-                  duration: 0.45,
+                  duration: 0.45 / motionSpeed,
                   ease: "easeOut",
                 }}
               >

@@ -24,7 +24,7 @@ export class CurveTrail {
     this.movedAt = -Infinity;
   }
 
-  update(cursor: TrailCursor | null, time: number) {
+  update(cursor: TrailCursor | null, time: number, speedMultiplier = 1) {
     if (!cursor) {
       this.reset();
       return { d: "", opacity: 0, points: [] as LightPoint[] };
@@ -43,7 +43,7 @@ export class CurveTrail {
       this.previous = cursor.value;
       this.movedAt = time;
     }
-    const opacity = cursor.hold ? 1 : 1 - ease((time - this.movedAt - 120) / 500);
+    const opacity = cursor.hold ? 1 : 1 - ease(((time - this.movedAt) * speedMultiplier - 120) / 500);
     if (!this.direction || opacity <= 0) return { d: "", opacity: 0, points: [] as LightPoint[] };
     const points = [cursor.at(cursor.value)];
     const limit = Math.max(cursor.min, Math.min(cursor.max, this.origin));

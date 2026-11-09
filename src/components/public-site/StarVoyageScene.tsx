@@ -8,6 +8,7 @@ import type * as ThreeTypes from "three";
 import type { VoyageNavigationFlight } from "./voyage-progress";
 import type { VoyageSceneState } from "./VoyageLoader";
 import { voyageComposition } from "./voyage-layout";
+import { MOBILE_MOTION_QUERY, motionSpeed } from "./motion-settings";
 import {
   clamp01,
   finale,
@@ -181,6 +182,7 @@ export default function StarVoyageScene({
       let navigationId = -1,
         navigationCameraFrom = 0;
       const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const mobileInput = window.matchMedia(MOBILE_MOTION_QUERY);
       const temp = new THREE.Vector3();
       const finalCenter = new THREE.Vector3();
       const orbitTangent = new THREE.Vector3();
@@ -371,7 +373,7 @@ export default function StarVoyageScene({
         lightFocus +=
           (state.light - lightFocus) *
           (1 -
-            Math.exp(-lightDelta / (state.light > lightFocus ? 0.11 : 0.14)));
+            Math.exp(-lightDelta * motionSpeed(mobileInput.matches) / (state.light > lightFocus ? 0.11 : 0.14)));
         const focusSettled = Math.abs(state.light - lightFocus) < 0.002;
         if (focusSettled) lightFocus = state.light;
         const flight = navigationFlight?.get();
