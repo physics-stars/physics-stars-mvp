@@ -13,7 +13,7 @@ espacio previo y la gravedad mantiene su velocidad independiente.
 
 La velocidad global se configura únicamente en
 [`motion-settings.ts`](../src/components/public-site/motion-settings.ts):
-`DESKTOP_SPEED_MULTIPLIER = 1.25` y `MOBILE_SPEED_MULTIPLIER = 2`.
+`DESKTOP_SPEED_MULTIPLIER = 1.25` y `MOBILE_SPEED_MULTIPLIER = 1.25`.
 El valor 1 representa el ritmo base de escritorio. Los multiplicadores se
 aplican a sensibilidad, velocidades, suavizado, navegación, fundidos,
 destellos y animaciones CSS públicas. Los tiempos se dividen por el factor y

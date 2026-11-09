@@ -1,6 +1,6 @@
 /** Global public-site pace. 1 = original desktop pace. Edit these two values. */
 export const DESKTOP_SPEED_MULTIPLIER = 1.25;
-export const MOBILE_SPEED_MULTIPLIER = 2;
+export const MOBILE_SPEED_MULTIPLIER = 1.25;
 
 /** Scroll distance for planet-side text only; intro and finale stay unchanged. */
 export const PLANET_READING_SCROLL_SCALE = 0.6;
