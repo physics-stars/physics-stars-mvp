@@ -13,7 +13,18 @@ const ca = {
     home: "El viatge", game: "Com es juga", teachers: "Per a docents", team: "Qui som",
     login: "Entra", language: "Idioma", skip: "Salta al contingut",
   },
-  about: { roles: ["Co-founder & CEO", "Co-founder & COO", "CTO"] },
+  about: {
+    roles: ["Co-founder & CEO", "Co-founder & COO", "CTO"],
+    messages: [
+      "En altres webs, fer clic a la foto d'algú sol portar-te al seu LinkedIn. Aquí no. Preferim posar els nostres perfils de LinkedIn a sota i aprofitar aquest espai per passar-nos-ho bé.",
+      "Anima'l una mica i ja ho tens: quan s'engresca, aquest paio és una força de la natura. I creu-nos, quan està en el seu element, construir alguna cosa al seu costat és una autèntica passada.",
+      "El seu cervell s'hauria d'estudiar. Dona-li una tasca i, un dia qualsevol, se t'acostarà per ensenyar-te una cosa al·lucinant, com si no fos res de l'altre món.",
+    ],
+    juanHint: "(Fes clic a la foto d'en Juan cinc vegades seguides.)",
+    showMessage: "Llegeix el missatge",
+    showPhoto: "Mostra la foto",
+    memeAlt: "La foto sorpresa d'en Juan",
+  },
   pilot: { subject: "Parlem de Physics Stars a la nostra aula" },
   footer: { line: "De les classes de repàs a un videojoc de física.", rights: "Un projecte que estem construint.", contact: "Contacta'ns" },
   login: {
@@ -44,7 +55,18 @@ const es: PublicCopy = {
     home: "El viaje", game: "Cómo se juega", teachers: "Para docentes", team: "Quiénes somos",
     login: "Entra", language: "Idioma", skip: "Saltar al contenido",
   },
-  about: { roles: ["Co-founder & CEO", "Co-founder & COO", "CTO"] },
+  about: {
+    roles: ["Co-founder & CEO", "Co-founder & COO", "CTO"],
+    messages: [
+      "En otras webs, hacer clic en la foto de alguien suele llevarte a su LinkedIn. Aquí no. Preferimos poner nuestros perfiles de LinkedIn debajo y aprovechar este espacio para pasarlo bien.",
+      "Dale un poco de ánimo y ya lo tienes: cuando se viene arriba, este tío es una fuerza de la naturaleza. Y créenos, cuando está en su salsa, construir algo a su lado es una auténtica pasada.",
+      "Habría que estudiar su cerebro. Dale una tarea y, un día cualquiera, se te acercará para enseñarte algo alucinante, como si no fuera para tanto.",
+    ],
+    juanHint: "(Haz clic en la foto de Juan cinco veces seguidas.)",
+    showMessage: "Leer el mensaje",
+    showPhoto: "Mostrar la foto",
+    memeAlt: "La foto sorpresa de Juan",
+  },
   pilot: { subject: "Hablemos de Physics Stars en nuestra aula" },
   footer: { line: "De las clases de repaso a un videojuego de física.", rights: "Un proyecto que estamos construyendo.", contact: "Contacta con nosotros" },
   login: {
@@ -73,7 +95,18 @@ const en: PublicCopy = {
     home: "The journey", game: "How it plays", teachers: "For teachers", team: "Our story",
     login: "Log in", language: "Language", skip: "Skip to content",
   },
-  about: { roles: ["Co-founder & CEO", "Co-founder & COO", "CTO"] },
+  about: {
+    roles: ["Co-founder & CEO", "Co-founder & COO", "CTO"],
+    messages: [
+      "On other websites, clicking someone's picture usually takes you to their LinkedIn. That's not our case. We prefer to put our LinkedIns below and use this space to have some fun.",
+      "Hype him up and you are all set: once this guy is fired up, he's a force of nature. And trust us, when he's in the zone it's a hell of a good time to build alongside him.",
+      "His brain should be studied. Give him a task and, on some random day, he'll just come up to you and show you the most amazing thing, acting like it's no big deal.",
+    ],
+    juanHint: "(Click Juan's picture five times in a row.)",
+    showMessage: "Read the message",
+    showPhoto: "Show the picture",
+    memeAlt: "Juan's surprise photo",
+  },
   pilot: { subject: "Physics Stars in our classroom" },
   footer: { line: "From tutoring to a physics game.", rights: "A project we're building together.", contact: "Contact us" },
   login: {

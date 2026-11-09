@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  Suspense,
   useContext,
   useEffect,
   useRef,
@@ -84,7 +85,9 @@ export function PublicShell({
           <Brand locale={locale} />
           {!login && <LandingNavigation locale={locale} />}
           <div className={styles.headerActions}>
-            <LanguageSwitch />
+            <Suspense fallback={<LanguageLinks locale={locale} pathname={login ? "/login" : "/"} />}>
+              <LanguageSwitch />
+            </Suspense>
             {!login && (
               <Link className={styles.loginLink} href={`/login?lang=${locale}`}>
                 {t.nav.login}
@@ -230,13 +233,21 @@ function LanguageSwitch() {
   const locale = usePublicLocale();
   const pathname = usePathname();
   const search = useSearchParams();
+  return <LanguageLinks locale={locale} pathname={pathname} search={search.toString()} />;
+}
+
+function LanguageLinks({ locale, pathname, search = "" }: {
+  locale: Locale;
+  pathname: string;
+  search?: string;
+}) {
   return (
     <nav
       className={styles.languages}
       aria-label={publicCopy[locale].nav.language}
     >
       {locales.map((language) => {
-        const params = new URLSearchParams(search.toString());
+        const params = new URLSearchParams(search);
         params.set("lang", language);
         return (
           <Link

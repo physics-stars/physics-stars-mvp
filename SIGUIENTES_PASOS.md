@@ -55,22 +55,11 @@ Posible punto de partida para el texto, pendiente de revisión:
 > problema y cómo comprobar una respuesta. Physics Stars quiere llevar ese
 > pensamiento crítico a la práctica a través del juego.
 
-## 3. Easter egg en la foto de Juan
+## 3. LinkedIn del equipo
 
-- [ ] Cuando tengamos la foto real de Juan, usarla como imagen habitual del equipo
-  y conservar el archivo de la foto del caballo para este easter egg.
-- [ ] Cambiar la foto de Juan por la del caballo al hacer cinco clics seguidos
-  sobre su foto en un intervalo de cinco segundos o menos, medido entre el primer
-  clic y el quinto. Si se supera ese plazo, empezar una nueva secuencia.
-- [ ] Mantener la foto del caballo visible durante el resto de esa visita a la
-  landing. Restablecer la foto real al recargar la página o salir de la landing,
-  por ejemplo al pulsar Login; volver a la landing debe mostrar la foto real.
-  Guardar la activación solo en memoria, sin persistirla entre visitas.
-
-## 4. LinkedIn del equipo
-
-- [ ] Añadir un botón pequeño con el icono «in» de LinkedIn junto al nombre/rol
-  de cada integrante del equipo, enlazado a su perfil correspondiente.
+- [ ] Añadir los perfiles de LinkedIn de David Diestre, Juan Roset y Aissam
+  Khadraoui. Incluir un botón pequeño con el icono «in» debajo de cada foto,
+  junto al nombre/cargo, enlazado al perfil correspondiente.
 
 ## Criterios para la implementación futura
 
@@ -80,9 +69,3 @@ Posible punto de partida para el texto, pendiente de revisión:
   [la landing](docs/landing-direction.md): estilos y componentes aislados, sin
   modificar pantallas internas, mecánicas del juego, APIs ni autenticación.
 
-## Recordatorio para la próxima sesión
-
-- [ ] Tras atender el primer prompt de una nueva sesión, recordar brevemente los
-  pendientes de cabecera, textos, fondos/párrafos y tipografía. Marcar solo esta
-  casilla al comunicar el recordatorio, sin iniciar el rediseño por ese motivo.
-  No activar el recordatorio en la sesión en que se crea este documento.

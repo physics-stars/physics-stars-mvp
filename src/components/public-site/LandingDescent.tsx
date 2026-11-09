@@ -406,7 +406,8 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         position = timeline.positionAtPage(scrollY); requested = position;
         schedule(); return;
       }
-      if (!driving && scrollY > geometry.logoEnd + 1) adopt();
+      // Native restoration and other external scrolls must update the camera too.
+      if (scrollY > geometry.logoEnd + 1) adopt();
     }
     function preference() {
       animated = !media.matches;
