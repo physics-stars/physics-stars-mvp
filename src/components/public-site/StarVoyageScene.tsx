@@ -154,6 +154,7 @@ export default function StarVoyageScene({
       );
       const trailMaterial = new THREE.ShaderMaterial({
         transparent: true,
+        depthTest: true,
         depthWrite: false,
         uniforms: { opacity: { value: 0.42 } },
         vertexShader: `attribute float alpha;varying float a;void main(){a=alpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
@@ -504,8 +505,12 @@ export default function StarVoyageScene({
         previousOrbit = p >= finale.orbit;
         wake.write(trailPositions, trailAlphas);
         for (let index = 0; index < trailCount; index++) {
-          const offset = index * 3,
-            depth = camera.position.z - trailPositions[offset + 2];
+          const offset = index * 3;
+          // The screen-space history moves with the camera. Older samples
+          // must not stay in front of a planet while the light is behind it.
+          // Retain deeper samples so the tail also emerges progressively.
+          trailPositions[offset + 2] = Math.min(trailPositions[offset + 2], star.position.z);
+          const depth = camera.position.z - trailPositions[offset + 2];
           trailPositions[offset] = cameraX + trailPositions[offset] * depth;
           trailPositions[offset + 1] *= depth;
         }
@@ -754,7 +759,8 @@ export default function StarVoyageScene({
           Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) *
           ((narrow ? 11 : 16) + 2 + maxRadius) *
           camera.aspect;
-        const step = Math.max(24, 2 * halfView + 2 * maxRadius + 4);
+        // Keep only enough separation to show one planet at a time.
+        const step = Math.max(16, 2 * halfView + 2 * maxRadius + 0.75);
         if (Math.abs(step - worldStep) > 0.001) {
           worldStep = step;
           motion = undefined;

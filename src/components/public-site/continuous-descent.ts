@@ -48,8 +48,11 @@ export function createDescentTimeline(g: DescentGeometry, returning = false) {
     : forwardTeamArrival;
   // Finish the contact sweep before the purple footer enters the viewport.
   const pilotReady = Math.min(pilot.end, g.footerTop - g.height - 4);
+  // Leave room for the arrival curve and halo in both viewport layouts.
+  const pilotInset = g.width > 760 ? 192 : 144;
+  const pilotEntryEnd = Math.max(pilot.right.y - g.height + 8, pilotReady - 48);
   const pilotArrival = Math.max(teamDeparture + 1,
-    Math.min(pilotReady, pilot.right.y - g.height + 8));
+    Math.min(pilotReady, pilotEntryEnd, pilot.right.y - g.height + pilotInset));
   const segments: DescentSegment[] = [];
   let length = 0;
   function add(kind: DescentSegment["kind"], index: number, pageStart: number, pageEnd: number,

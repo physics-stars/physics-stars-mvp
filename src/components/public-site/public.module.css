@@ -16,7 +16,7 @@
   font-family: var(--font-public-reading), sans-serif;
   font-size: 17px;
   -webkit-font-smoothing: antialiased;
-  -webkit-tap-highlight-color: #b79ae440;
+  -webkit-tap-highlight-color: transparent;
 }
 .site * { box-sizing: border-box; }
 .site :is(h1, h2, h3, p) { margin: 0; }

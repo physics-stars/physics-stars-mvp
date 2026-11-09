@@ -318,6 +318,11 @@
   grid-column: 2;
   grid-row: 2;
 }
+@media (min-width: 761px) {
+  .pilotAction {
+    margin-bottom: clamp(160px, 18svh, 220px);
+  }
+}
 .primaryButton {
   position: relative;
   isolation: isolate;
@@ -559,7 +564,7 @@
     grid-template-columns: 1fr;
     grid-template-rows: 1fr auto;
     gap: 40px;
-    padding: 44px 32px 32px;
+    padding: 44px 32px calc(85.333px + env(safe-area-inset-bottom, 0px));
   }
   .pilotContent {
     grid-column: 1;

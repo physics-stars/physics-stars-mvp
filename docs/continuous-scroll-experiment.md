@@ -6,6 +6,39 @@ solo modifica el movimiento de la landing.
 
 ## Respuesta al gesto
 
+Actualización del recorrido: los vuelos entre planetas y la formación del logo
+usan el 35 % de su distancia anterior. La aparición, lectura y salida de cada
+texto planetario conservan toda su distancia y velocidad originales, igual que
+la introducción. Solo durante los vuelos se duplica el límite de velocidad y el
+margen de respuesta pasa de 90 a 180 ms. La lectura final ocupa 1,2 veces la
+distancia media de lectura de los planetas y dura 1,2 veces su duración media
+con entrada continua fuerte. Su escala se calcula desde esos intervalos.
+Estos valores sustituyen el doble de espacio y el límite de 0,04 indicados abajo.
+
+En PC, la acción de contacto queda más arriba y la llegada a su barra reserva
+espacio para mostrar la curva y el halo completos, además del barrido. En móvil,
+hay unos 85 px de fondo claro bajo la acción (dos tercios del margen anterior), más el área segura del dispositivo;
+la llegada también reserva espacio para la curva y el barrido. El indicador del cierre es un enlace a la primera sección
+inferior, con traducción EN / ES / CA y activación por teclado.
+
+Ese enlace baja hasta el inicio de la primera sección con una transición de
+850 ms, interrumpible al usar rueda, teclado o gesto táctil. Los planetas se
+colocan durante toda la aproximación de la luz, hasta la lectura, y tienen menos
+separación vacía entre ellos. El ritmo y las curvas visibles de la luz se conservan.
+
+La gravedad mueve el progreso directamente sobre su curva temporal, sin pasar
+por el seguidor ni por los límites de velocidad de vuelo. Una vez capturada,
+conserva su destino aunque fluctúe una medición de visibilidad; un gesto nuevo
+la cancela. Así no frena ni vuelve a acelerar al cruzar la aparición del texto.
+
+Los enlaces y botones públicos no muestran el recuadro de toque del navegador;
+se conserva el foco de teclado. La llegada izquierda abre su curva gradualmente
+y atenúa la última ondulación antes de la barra. El recorrido derecho comparte
+velocidad entre salida, vuelo y entrada, con arranque suave junto al equipo.
+La curva izquierda se abre ligeramente hacia fuera antes de su llegada horizontal,
+siguiendo la referencia dibujada. Pulsar la marca de la cabecera desde la landing
+reinicia el viaje y devuelve el scroll al comienzo; desde el login conserva su enlace.
+
 La sensibilidad base es el 40 %. Un gesto tiene menos efecto, en lugar de
 guardar su desplazamiento para reproducirlo durante varios segundos. El destino
 solo puede adelantarse el equivalente a 90 ms a la velocidad permitida. La

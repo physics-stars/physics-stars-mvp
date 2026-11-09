@@ -4,13 +4,13 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { useMotionValue, type MotionValue } from "framer-motion";
 import { finale, smoothRange } from "./voyage-timeline";
 import { scrollHandoffEvent, type ScrollHandoff } from "./descent-controller";
-import { scrollInputTarget, followVoyage, maximumInputLag, PlanetGravity, planetGravityDelay, planetReadingCenter, TouchMomentum,
-  voyageProgressAt, voyageScrollDistance, voyageScrollLength, voyageSpeedLimit } from "./continuous-scroll";
+import { scrollInputTarget, followVoyage, PlanetGravity, planetReadingCenter, TouchMomentum,
+  voyageInputLead, voyageProgressAt, voyageScrollDistance, voyageScrollLength } from "./continuous-scroll";
 
 export type VoyageNavigationFlight = { id: number; from: number; to: number; amount: number };
 
-/** Inputs have less effect, with a short bounded response instead of a long
- * playback queue. Gravity is independent of animations and reading gates. */
+/** The voyage responds to smaller gestures with a short bounded destination.
+ * Gravity is independent of animations and reading gates. */
 export function useVoyageProgress(target: MotionValue<number>, track: RefObject<HTMLElement | null>,
   header: number, enabled: boolean) {
   const progress = useMotionValue(0);
@@ -29,6 +29,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     const element = document.getElementById("idea");
     if (!enabled || !element || element !== track.current) return;
     let disposed = false, frame = 0, previousTime = 0, velocity = 0;
+    let followingSectionScroll = false;
     let lastInputAt = -Infinity, lastWrittenY = NaN;
     const touch = new TouchMomentum();
     const gravity = new PlanetGravity();
@@ -124,8 +125,9 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       const current = progress.get();
       const center = planetReadingCenter(current, requested, visiblePlanet());
       requested = gravity.target(current, requested, center, dt, time - lastInputAt);
-      if (center !== null && time - lastInputAt >= planetGravityDelay)
-        element!.dataset.voyageGravity = center.toFixed(6);
+      const attracting = gravity.destination !== null;
+      if (attracting)
+        element!.dataset.voyageGravity = gravity.destination!.toFixed(6);
       else delete element!.dataset.voyageGravity;
       if (current >= 1 - 0.0000001 && requested > 1) { handoff(); return; }
       const destination = Math.max(0, requested);
@@ -133,10 +135,15 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       if (Math.abs(delta) < 0.0000001 && Math.abs(velocity) < 0.000001) {
         velocity = 0;
         write(destination);
-        if (center !== null && Math.abs(requested - center) > 0.0000001) schedule();
+        const attractionCenter = gravity.destination ?? center;
+        if (attractionCenter !== null && Math.abs(requested - attractionCenter) > 0.0000001) schedule();
         return;
       }
-      const next = followVoyage(current, destination, velocity, dt);
+      // Gravity already supplies a timed C2 curve. A second follower and the
+      // flight/reading speed caps would brake and accelerate it at boundaries.
+      const next = attracting
+        ? { position: destination, unbounded: destination, velocity: (destination - current) / (dt / 1000) }
+        : followVoyage(current, destination, velocity, dt);
       velocity = next.velocity;
       if (next.unbounded >= 1 && requested > 1) { handoff(); return; }
       write(next.position);
@@ -149,7 +156,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       const b = bounds();
       const descentLength = Number(document.querySelector<HTMLElement>("[data-descent-root]")?.dataset.scrollLength) || innerHeight * 4;
       const current = progress.get();
-      const lead = voyageScrollDistance(current + voyageSpeedLimit(current) * maximumInputLag / 1000) - voyageScrollDistance(current);
+      const lead = voyageInputLead(current);
       requested = voyageProgressAt(scrollInputTarget(voyageScrollDistance(current), voyageScrollDistance(requested),
         delta / b.length, 0, voyageScrollLength + descentLength / b.length, lead));
       lastInputAt = performance.now();
@@ -195,6 +202,7 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     }
     function touchEnd() { touchY = null; consume(touch.release(performance.now())); }
     function resume(event: Event) {
+      followingSectionScroll = false;
       gravity.reset();
       clearDirectSeek();
       nativeExit = false;
@@ -209,9 +217,11 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
     function navigate(event: Event) {
       gravity.reset();
       clearDirectSeek();
-      const home = (event as CustomEvent<string>).detail === "idea";
+      const detail = (event as CustomEvent<string | { id: string; behavior?: string }>).detail;
+      const home = (typeof detail === "string" ? detail : detail.id) === "idea";
+      followingSectionScroll = typeof detail === "object" && detail.behavior === "smooth";
       nativeExit = !home;
-      requested = home ? 0 : 1;
+      requested = followingSectionScroll ? progress.get() : home ? 0 : 1;
       velocity = 0;
       previousTime = 0;
       progress.set(requested);
@@ -219,6 +229,18 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       if (home) schedule();
     }
     function nativeScroll() {
+      if (followingSectionScroll) {
+        // The section transition owns the page; finish the title's rise from
+        // its current pose using that same scroll, without jumping to p = 1.
+        const b = bounds();
+        const p = Math.max(0, Math.min(1, voyageProgressAt((scrollY - b.start) / b.length)));
+        requested = p;
+        progress.set(p);
+        target.set(voyageScrollDistance(p) / voyageScrollLength);
+        mark();
+        if (p >= 1) followingSectionScroll = false;
+        return;
+      }
       if (nativeExit || directSeek || Math.abs(scrollY - lastWrittenY) <= 2) return;
       const b = bounds();
       const p = voyageProgressAt((scrollY - b.start) / b.length);
@@ -235,11 +257,13 @@ export function useVoyageProgress(target: MotionValue<number>, track: RefObject<
       if (!nativeExit) { write(progress.get()); schedule(); }
     }
     seekRef.current = (point) => {
+      followingSectionScroll = false;
       gravity.reset();
       clearDirectSeek(); nativeExit = false; requested = point; velocity = 0;
       write(point); schedule();
     };
     navigateRef.current = (point) => {
+      followingSectionScroll = false;
       gravity.reset();
       if (directSeek?.point === point) return;
       const from = progress.get(), fadeFrom = navigationOpacity.get();

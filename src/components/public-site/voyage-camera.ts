@@ -16,7 +16,9 @@ function cameraLeg(p: number, narrow: boolean, step: number) {
   const visit = visits[index];
   return {
     start: index ? visits[index - 1].departure : visit.start,
-    end: visit.arrived,
+    // Let the planet settle throughout the light's approach, rather than
+    // rushing the entire camera movement into the start of the flight.
+    end: visit.parked,
     from: index * step + (index ? offset(index - 1) : narrow ? 4 : 0),
     to: (index + 1) * step + offset(index),
   };

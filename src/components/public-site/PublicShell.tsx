@@ -201,6 +201,18 @@ export function Brand({ locale }: { locale: Locale }) {
       aria-label="Physics Stars"
       translate="no"
       className={styles.brand}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ||
+          !document.getElementById("idea")) return;
+        event.preventDefault();
+        const jump = new CustomEvent("landing-navigate", {
+          detail: "idea", cancelable: true,
+        });
+        if (!window.dispatchEvent(jump)) return;
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+        if (location.hash)
+          history.replaceState(history.state, "", location.pathname + location.search);
+      }}
     >
       <Image src="/logo.svg" alt="" width={36} height={36} />
       <span>

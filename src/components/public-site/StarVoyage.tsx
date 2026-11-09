@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { ArrowDown } from "lucide-react";
@@ -123,6 +123,7 @@ export function StarVoyage() {
       id="idea"
       ref={track}
       className={`${styles.track} ${linear ? styles.linearTrack : ""}`}
+      style={{ "--voyage-scroll-length": voyageScrollLength } as CSSProperties}
       aria-label={copy.genre}
       data-voyage-complete={linear || logoFormed}
     >
@@ -198,9 +199,20 @@ export function StarVoyage() {
               </p>
               <h2>{copy.finalTitle}</h2>
               <p>{copy.finalBody}</p>
-              <motion.div
+              <motion.a
+                href="#sobre"
                 className={styles.continueHint}
                 data-voyage-continue
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                  event.preventDefault();
+                  const section = document.getElementById("sobre");
+                  if (!section) return;
+                  const jump = new CustomEvent("landing-navigate", {
+                    detail: { id: "sobre", behavior: "smooth" }, cancelable: true,
+                  });
+                  window.dispatchEvent(jump);
+                }}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{
                   opacity: logoFormed && navigationTarget === null ? 1 : 0,
@@ -210,11 +222,10 @@ export function StarVoyage() {
                   duration: 0.45,
                   ease: "easeOut",
                 }}
-                aria-hidden="true"
               >
                 {copy.continueScroll}
-                <ArrowDown size={17} strokeWidth={1.4} />
-              </motion.div>
+                <ArrowDown size={17} strokeWidth={1.4} aria-hidden="true" />
+              </motion.a>
             </motion.div>
           </motion.div>
           <div className={styles.bottomControls}>

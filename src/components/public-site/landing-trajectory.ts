@@ -1,4 +1,4 @@
-import { byDistance, clamp, mix, pathLength, quintic, spline, splitRoute, type LightPath, type LightPoint, type LightSide } from "./descent-motion";
+import { byDistance, clamp, mix, paced, pathLength, quintic, spline, splitRoute, type LightPath, type LightPoint, type LightSide } from "./descent-motion";
 import { bridgeFrame, bridgeLength } from "./descent-scroll";
 
 // Geometry from c473e92, the saved version before the public redesign.
@@ -18,7 +18,9 @@ function savedGlassRoute(
   const lane = Math.max(18, Math.min(neck.x - Math.min(140, space * 0.95), target.x - 40));
   const radius = (neck.x - lane) / 2;
   const rise = Math.min(radius, (neck.y - header - 30) * 0.35);
-  const entryHandle = Math.max(0, Math.min(40, (target.x - lane) * 0.8));
+  const approachLane = Math.max(12, lane - Math.min(16, (target.x - lane) * 0.25));
+  const approachSway = Math.min(width <= 760 ? 12 : 20, Math.max(0, target.x - lane) * 0.4);
+  const entryHandle = Math.max(0, Math.min(64, (target.x - approachLane) * 0.8));
   const leadScale = Math.min(1, Math.max(0, target.y - neck.y - rise * 2.2) / 320);
   // One C2 spline owns the entire external gesture. Scroll phases only sample
   // it; there are no separate arch/lead/wave curves to flatten at their joins.
@@ -32,10 +34,12 @@ function savedGlassRoute(
     { x: lane, y: neck.y - rise * 0.1 },
     { x: lane, y: neck.y + rise * 0.7 },
     { x: lane, y: neck.y + rise * 2.2 },
-    { x: lane, y: target.y - 240 * leadScale },
-    { x: receives ? lane : target.x, y: target.y - 120 * leadScale },
+    // Restore a broad rightward sway before the final left arc.
+    { x: receives ? lane + approachSway : lane, y: target.y - 240 * leadScale },
+    { x: receives ? approachLane : target.x, y: target.y - 150 * leadScale },
     ...(receives ? [
-      { x: lane, y: target.y - 60 * leadScale },
+      // A broad outer arc rolls gradually into the horizontal bar.
+      { x: approachLane, y: target.y - 80 * leadScale },
       { x: target.x - entryHandle, y: target.y },
       { x: target.x - entryHandle / 2, y: target.y },
     ] : [
@@ -56,12 +60,19 @@ function savedGlassRoute(
     return 0.15;
   }
   const released = turnAt(base);
-  const completed = receives ? 1 - Math.min(0.2, 60 / pathLength(base)) : 1;
+  const baseLength = pathLength(base);
+  const completed = receives ? 1 - Math.min(0.2, 60 / baseLength) : 1;
+  const approachStart = 1 - Math.min(0.4, 280 / baseLength);
+  const approachEnd = 1 - Math.min(0.18, 120 / baseLength);
   const waveAt = (t: number) => {
     const u = clamp((t - released) / (completed - released));
-    return Math.sin(2 * Math.PI * u) * Math.sin(Math.PI * u) ** 2;
+    const taper = receives ? 1 - smoothPosition(clamp((t - approachStart) / (approachEnd - approachStart))) : 1;
+    // Finish the wave before the final approach so it remains one clean turn.
+    const balance = 0.75 + 0.25 * smoothPosition(u);
+    return Math.sin(2 * Math.PI * u) * Math.sin(Math.PI * u) ** 2 * balance * taper;
   };
-  let amplitude = width <= 760 ? 24 : 32;
+  // Shallower waves and a longer blend avoid a tight bend before arrival.
+  let amplitude = width <= 760 ? 14 : 20;
   for (let i = 1; i < 512; i++) {
     const t = i / 512, p = base(t), wave = waveAt(t);
     if (wave < 0) amplitude = Math.min(amplitude, (p.x - 12) / -wave);
@@ -103,17 +114,23 @@ function savedRightRoute(
   const gap = Math.max(1, end.y - team.y);
   const outer = Math.max(team.x, pilot.x);
   const room = Math.max(4, width - 12 - outer);
-  const lane = outer + room * 0.58;
+  const lane = outer + room * 0.66;
   const drop = Math.max(24, Math.min(70, room * 0.8, gap * 0.2));
   const rise = receives ? Math.min(64, gap * 0.2) : 0;
   const leaving = { x: lane, y: team.y + drop };
   const entering = { x: receives ? lane : end.x, y: end.y - rise };
+  const amplitude = Math.min(24, room * 0.23);
+  const inwardSway = Math.min(13, room * 0.2);
+  const leftSway = inwardSway * 0.8, rightSway = amplitude * 0.65;
+  const waveSpan = Math.max(1, entering.y - leaving.y);
+  const launchLean = drop * 2 * Math.PI * leftSway / waveSpan;
+  const entryLean = rise * 2 * Math.PI * rightSway / waveSpan;
   const launch = byDistance(quintic(
     team,
-    { x: mix(team.x, lane, 1 / 3), y: team.y },
-    { x: mix(team.x, lane, 2 / 3), y: team.y },
-    { x: lane, y: mix(team.y, leaving.y, 1 / 3) },
-    { x: lane, y: mix(team.y, leaving.y, 2 / 3) },
+    { x: mix(team.x, lane, 0.45), y: team.y },
+    { x: mix(team.x, lane, 0.9), y: team.y },
+    { x: lane + launchLean * 2 / 3, y: mix(team.y, leaving.y, 1 / 3) },
+    { x: lane + launchLean / 3, y: mix(team.y, leaving.y, 2 / 3) },
     leaving,
   ));
   // Continue the same broad turn as the page starts moving. Squeezing the
@@ -126,10 +143,11 @@ function savedRightRoute(
   }
   const split = Math.max(0.05, low);
   const departure = (t: number) => launch(t * split);
-  const amplitude = Math.min(24, room * 0.25);
   const wave = byDistance((t) => ({
     x: mix(leaving.x, entering.x, smoothPosition(t)) +
-      amplitude * Math.sin(2 * Math.PI * t) * Math.sin(Math.PI * t) ** 2,
+      // One broad S spreads both bends across the whole descent. Its tangent
+      // continues through the launch and arrival instead of flattening out.
+      -mix(leftSway, rightSway, smoothPosition(t)) * Math.sin(2 * Math.PI * t),
     y: mix(leaving.y, entering.y, t),
   }));
   const bendLength = pathLength(launch) * (1 - split);
@@ -139,8 +157,8 @@ function savedRightRoute(
     : wave((t - bend) / (1 - bend));
   const entry = receives ? byDistance(quintic(
     entering,
-    { x: entering.x, y: mix(entering.y, end.y, 1 / 3) },
-    { x: entering.x, y: mix(entering.y, end.y, 2 / 3) },
+    { x: entering.x - entryLean / 3, y: mix(entering.y, end.y, 1 / 3) },
+    { x: entering.x - entryLean * 2 / 3, y: mix(entering.y, end.y, 2 / 3) },
     { x: mix(end.x, entering.x, 2 / 3), y: end.y },
     { x: mix(end.x, entering.x, 1 / 3), y: end.y },
     end,
@@ -164,10 +182,23 @@ export function landingTrajectory(source: LightPoint, neck: LightPoint, target: 
     : savedRightRoute(source, target, width, height, header, false, true, pageDistance);
   const scroll = { start: 0, end: pageDistance, exit: 140, entry: 100 };
   const length = bridgeLength(scroll);
+  let timedParts = parts;
+  if (side === "right") {
+    const rates = [pathLength(parts.departure) / scroll.exit,
+      pathLength(parts.flight) / Math.max(1, pageDistance), pathLength(parts.entry) / scroll.entry];
+    const sharedSpeed = (a: number, b: number) => a + b > 0 ? 2 * a * b / (a + b) : 0;
+    const leaving = sharedSpeed(rates[0], rates[1]), arriving = sharedSpeed(rates[1], rates[2]);
+    timedParts = {
+      ...parts,
+      departure: paced(parts.departure, scroll.exit, 0, leaving),
+      flight: paced(parts.flight, pageDistance, leaving, arriving),
+      entry: paced(parts.entry, scroll.entry, arriving, rates[2]),
+    };
+  }
   function at(distance: number) {
     const frame = bridgeFrame(scroll, clamp(distance / length) * length);
-    const point = frame.phase === "departure" ? parts.departure(frame.amount)
-      : frame.phase === "flight" ? parts.flight(frame.amount) : parts.entry(frame.amount);
+    const point = frame.phase === "departure" ? timedParts.departure(frame.amount)
+      : frame.phase === "flight" ? timedParts.flight(frame.amount) : timedParts.entry(frame.amount);
     return { phase: frame.phase, amount: frame.amount, camera: frame.y, point,
       visible: { x: point.x, y: point.y - frame.y } };
   }

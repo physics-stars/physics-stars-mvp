@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { scrollInputTarget, followVoyage, gravityTarget, maximumInputLag, nearestCenter, planetReadingCenter,
-  finalReadingSpeed, finalTextOffset, finalTextOpacity, PlanetGravity, planetGravityDelay, planetGravityDuration,
+import { scrollInputTarget, followVoyage, gravityTarget, maximumInputLag, maximumVoyageInputLag, nearestCenter, planetReadingCenter,
+  finalReadingRatio, finalReadingSpeed, finalTextOffset, finalTextOpacity, PlanetGravity, planetGravityDelay, planetGravityDuration,
   planetTextOffset, planetTextOpacity, slideGravityDelay, slideScrollSpeed, TouchMomentum, voyageProgressAt, voyageScrollDistance, voyageScrollLength,
-  voyageSpeedLimit } from "../src/components/public-site/continuous-scroll";
+  voyageFlightScale, voyageInputLead, voyageSpeedLimit } from "../src/components/public-site/continuous-scroll";
 import { barIllumination, createDescentTimeline, type DescentGeometry } from "../src/components/public-site/continuous-descent";
 import { finale, visits, waypointStops } from "../src/components/public-site/voyage-timeline";
 import { followScroll } from "../src/components/public-site/descent-controller";
@@ -17,6 +17,20 @@ test("scroll sensitivity and a bounded lead prevent a large gesture from creatin
   const requested = scrollInputTarget(actual, actual, 100000, 0, 5000, lead);
   for (let i = 0; i < 20; i++) actual = followScroll(actual, requested, 16, slideScrollSpeed);
   assert.ok(Math.abs(actual - (100 + lead)) < 0.15);
+});
+
+test("flight gestures advance further with a short lead and reverse immediately without changing the lower sections", () => {
+  const actual = 0.2;
+  const lead = voyageInputLead(actual);
+  const previous = scrollInputTarget(actual, actual, 10 / 6000, 0, 1, lead);
+  const distance = voyageScrollDistance(actual);
+  const quicker = voyageProgressAt(scrollInputTarget(distance, distance, 10 / 6000, 0, voyageScrollLength, lead));
+  assert.ok(Math.abs((quicker - actual) / (previous - actual) - 1 / voyageFlightScale) < 0.000001);
+  const fling = scrollInputTarget(distance, distance, 100, 0, voyageScrollLength, lead);
+  assert.equal(fling, distance + lead);
+  assert.ok(voyageProgressAt(fling) - actual <= voyageSpeedLimit(actual) * maximumVoyageInputLag / 1000 + 0.000001);
+  assert.ok(voyageProgressAt(scrollInputTarget(distance, fling, -10 / 6000, 0, voyageScrollLength, lead)) < actual);
+  assert.equal(scrollInputTarget(100, 100, 100, 0, 5000, slideScrollSpeed * maximumInputLag), 140);
 });
 
 test("planet gravity requires the full rendered planet, including during travel, and excludes the logo", () => {
@@ -49,12 +63,49 @@ test("planet attraction waits for quiet and follows a slow S curve without an in
   assert.equal(gravity.target(0.12, 0.125, null, 16, 1000), 0.125);
 });
 
-test("only the reading space after logo formation is doubled and the mapping is reversible", () => {
-  assert.ok(Math.abs(voyageScrollLength - 1.045) < 0.0000001);
-  assert.ok(Math.abs(voyageScrollDistance(1) - voyageScrollDistance(finale.sealed) - 2 * (1 - finale.sealed)) < 0.0000001);
-  for (const p of [0, 0.1, 0.5, finale.sealed, 0.97, 1, 1.05]) {
+test("planet attraction keeps its clock across visibility changes and starts at the visible position", () => {
+  const gravity = new PlanetGravity();
+  let actual = 0.09;
+  const first = gravity.target(actual, 0.11, 0.137, 16, planetGravityDelay);
+  assert.ok(first > actual && first - actual < 0.00001);
+  actual = first;
+  for (let time = 16; time < planetGravityDuration; time += 16) {
+    const next = gravity.target(actual, actual, time % 48 ? null : 0.137, 16, planetGravityDelay + time);
+    assert.ok(next >= actual);
+    actual = next;
+  }
+  assert.ok(Math.abs(actual - 0.137) < 0.000001);
+  gravity.target(actual, actual - 0.01, 0.137, 16, 0);
+  assert.equal(gravity.destination, null);
+});
+
+test("flights and logo formation use less scroll while every text retains its original reading distance", () => {
+  const distance = (from: number, to: number) => voyageScrollDistance(to) - voyageScrollDistance(from);
+  assert.ok(voyageScrollLength < 1.045);
+  assert.equal(distance(0, 0.018), 0.018);
+  visits.forEach((visit, index) => {
+    assert.ok(Math.abs(distance(visit.parked, visit.departure) - (visit.departure - visit.parked)) < 0.0000001);
+    const from = index === 0 ? 0.018 : visits[index - 1].departure;
+    assert.ok(Math.abs(distance(from, visit.parked) - (visit.parked - from) * voyageFlightScale) < 0.0000001);
+    const center = waypointStops[index + 1];
+    const start = voyageScrollDistance(center);
+    const after = voyageProgressAt(scrollInputTarget(start, start, 0.001, 0, voyageScrollLength, voyageInputLead(center)));
+    assert.ok(Math.abs(after - center - 0.0004) < 0.0000001);
+    assert.ok(Math.abs(voyageInputLead(center) - voyageSpeedLimit(center) * maximumInputLag / 1000) < 0.0000001);
+  });
+  assert.ok(Math.abs(distance(visits.at(-1)!.departure, finale.sealed) -
+    (finale.sealed - visits.at(-1)!.departure) * voyageFlightScale) < 0.0000001);
+  const averageReadingSpan = visits.reduce((span, visit) => span + visit.departure - visit.parked, 0) / visits.length;
+  assert.ok(Math.abs(distance(finale.sealed, 1) - averageReadingSpan * finalReadingRatio) < 0.0000001);
+});
+
+test("compressed voyage mapping is continuous, monotonic and reversible at every boundary", () => {
+  let previous = -1;
+  for (let p = -0.01; p <= 1.05; p += 0.0005) {
+    const distance = voyageScrollDistance(p);
+    assert.ok(distance > previous);
+    previous = distance;
     assert.ok(Math.abs(voyageProgressAt(voyageScrollDistance(p)) - p) < 0.0000001);
-    if (p <= finale.sealed) assert.equal(voyageScrollDistance(p), p);
   }
 });
 
@@ -101,8 +152,12 @@ test("planet fades follow their original timing while the final text fades in an
 });
 
 test("the final text has a readable interval and only rises to its original baseline", () => {
-  assert.ok((1 - finale.sealed) / finalReadingSpeed > 1);
-  assert.ok((1 - waypointStops.at(-1)!) / finalReadingSpeed >= 0.5);
+  const averageDuration = visits.reduce((duration, visit) => {
+    const step = (visit.departure - visit.parked) / 1000;
+    for (let i = 0; i < 1000; i++) duration += step / voyageSpeedLimit(visit.parked + (i + 0.5) * step);
+    return duration;
+  }, 0) / visits.length;
+  assert.ok(Math.abs((1 - finale.sealed) / finalReadingSpeed / averageDuration - finalReadingRatio) < 0.001);
   assert.equal(finalTextOffset(finale.sealed), 4);
   assert.equal(finalTextOffset(1), 0);
   assert.equal(finalTextOffset(1.1), 0);
@@ -259,6 +314,25 @@ test("the contact line finishes lighting before the purple footer becomes visibl
     const state = timeline.at(timeline.positionAtPage(g.footerTop - g.height));
     assert.equal(state.segment.kind, "resident");
     assert.equal(state.segment.index, 2);
+  }
+});
+
+test("desktop contact arrival leaves visible room for the curve and halo above the bottom edge", () => {
+  const raised = { ...geometry, sections: geometry.sections.map((section, index) => index === 2
+    ? { ...section, right: { ...section.right, y: section.right.y - 160 } } : section) };
+  const timeline = createDescentTimeline(raised);
+  const charge = timeline.segments.find(s => s.kind === "charge" && s.index === 2)!;
+  const barY = raised.sections[2].right.y - charge.pageStart;
+  assert.ok(barY <= raised.height - 128);
+  assert.ok(charge.pageEnd > charge.pageStart);
+  assert.ok(raised.footerTop - charge.pageEnd > raised.height);
+  const journey = timeline.segments.find(s => s.kind === "journey" && s.index === 2)!;
+  for (let position = journey.from; position < journey.to; position += 1) {
+    const state = timeline.at(position);
+    if (state.frame?.phase === "entry") {
+      const lightY = state.frame.point.y + journey.pageStart - state.page;
+      assert.ok(lightY <= raised.height - 48, `Arrival is clipped at ${lightY}`);
+    }
   }
 });
 

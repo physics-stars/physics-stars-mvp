@@ -2,25 +2,74 @@ import { clamp01, finale, smoothRange, visits } from "./voyage-timeline";
 
 export const scrollSensitivity = 0.4;
 export const maximumInputLag = 90;
+export const maximumVoyageInputLag = 180;
 export const slideScrollSpeed = 1.2;
 export const slideGravityDelay = 350;
-export const finalReadingSpeed = 0.04;
 export const planetGravityDelay = 550;
 export const planetGravityDuration = 2400;
-export const finalReadingScale = 2;
-export const voyageScrollLength = finale.sealed + finalReadingScale * (1 - finale.sealed);
+export const finalReadingRatio = 1.2;
+const averagePlanetReadingSpan = visits.reduce((span, visit) =>
+  span + visit.departure - visit.parked, 0) / visits.length;
+export const finalReadingScale = averagePlanetReadingSpan * finalReadingRatio / (1 - finale.sealed);
 
-/** Add space only after the logo has formed; earlier flight coordinates stay
- * identical, including on resize and direct navigation. */
+function planetVisitSpeed(progress: number, visit: (typeof visits)[number]) {
+  const reading = smoothRange(visit.parked, visit.parked + 0.01, progress) *
+    (1 - smoothRange(visit.textOut, visit.departure, progress));
+  return 0.06 + 0.27 * reading;
+}
+
+// Match both gesture distance and duration under continuous strong input.
+const averagePlanetReadingDuration = visits.reduce((duration, visit) => {
+  const step = (visit.departure - visit.parked) / 100;
+  for (let i = 0; i < 100; i++) duration += step / planetVisitSpeed(visit.parked + (i + 0.5) * step, visit);
+  return duration;
+}, 0) / visits.length;
+export const finalReadingSpeed = (1 - finale.sealed) / (averagePlanetReadingDuration * finalReadingRatio);
+export const voyageFlightScale = 0.35;
+const heroReadingEnd = 0.018;
+const voyageFlights = [
+  ...visits.map((visit, index) => [index === 0 ? heroReadingEnd : visits[index - 1].departure, visit.parked]),
+  [visits.at(-1)!.departure, finale.sealed],
+];
+const scrollSegments = [
+  { from: 0, to: heroReadingEnd, scale: 1 },
+  ...visits.flatMap((visit, index) => [
+    { from: voyageFlights[index][0], to: visit.parked, scale: voyageFlightScale },
+    { from: visit.parked, to: visit.departure, scale: 1 },
+  ]),
+  { from: visits.at(-1)!.departure, to: finale.sealed, scale: voyageFlightScale },
+  { from: finale.sealed, to: 1, scale: finalReadingScale },
+];
+export const voyageScrollLength = scrollSegments.reduce((length, segment) =>
+  length + (segment.to - segment.from) * segment.scale, 0);
+
+/** Compress flights and logo formation only. All text, including its entrance
+ * and exit fades, keeps its original physical scroll distance. */
 export function voyageScrollDistance(progress: number) {
-  if (progress <= finale.sealed) return progress;
-  if (progress <= 1) return finale.sealed + (progress - finale.sealed) * finalReadingScale;
-  return voyageScrollLength + progress - 1;
+  if (progress <= 0) return progress;
+  let distance = 0;
+  for (const segment of scrollSegments) {
+    distance += (Math.min(progress, segment.to) - segment.from) * segment.scale;
+    if (progress <= segment.to) return distance;
+  }
+  return distance + progress - 1;
 }
 export function voyageProgressAt(distance: number) {
-  if (distance <= finale.sealed) return distance;
-  if (distance <= voyageScrollLength) return finale.sealed + (distance - finale.sealed) / finalReadingScale;
-  return 1 + distance - voyageScrollLength;
+  if (distance <= 0) return distance;
+  let remaining = distance;
+  for (const segment of scrollSegments) {
+    const length = (segment.to - segment.from) * segment.scale;
+    if (remaining <= length) return segment.from + remaining / segment.scale;
+    remaining -= length;
+  }
+  return 1 + remaining;
+}
+
+export function voyageInputLead(progress: number) {
+  const reading = scrollSegments.some(segment => segment.scale !== voyageFlightScale &&
+    progress >= segment.from && progress <= segment.to);
+  const lag = reading ? maximumInputLag : maximumVoyageInputLag;
+  return voyageScrollDistance(progress + voyageSpeedLimit(progress) * lag / 1000) - voyageScrollDistance(progress);
 }
 
 /** Smaller gestures, with only a short response window ahead of the visible
@@ -65,14 +114,18 @@ export class PlanetGravity {
   private center: number | null = null;
   private from = 0;
   private elapsed = 0;
+  get destination() { return this.center; }
   reset() { this.center = null; this.elapsed = 0; }
   target(actual: number, requested: number, center: number | null, elapsed: number, quietFor: number) {
-    if (center === null || quietFor < planetGravityDelay) { this.reset(); return requested; }
-    if (this.center !== center) {
-      this.center = center; this.from = requested; this.elapsed = 0;
+    if (quietFor < planetGravityDelay) { this.reset(); return requested; }
+    // Once captured, a visibility measurement cannot restart the attraction.
+    const destination = center ?? this.center;
+    if (destination === null) return requested;
+    if (this.center !== destination) {
+      this.center = destination; this.from = actual; this.elapsed = 0;
     }
     this.elapsed = Math.min(planetGravityDuration, this.elapsed + Math.max(0, Math.min(32, elapsed)));
-    const desired = this.from + (center - this.from) * smoothRange(0, planetGravityDuration, this.elapsed);
+    const desired = this.from + (destination - this.from) * smoothRange(0, planetGravityDuration, this.elapsed);
     return Math.max(actual - 0.01, Math.min(actual + 0.01, desired));
   }
 }
@@ -110,7 +163,7 @@ export function finalTextOffset(progress: number) {
   return readingTextOffset(progress, finale.sealed, finale.sealed + 0.008, 0.992, 1, 4);
 }
 
-/** Preserve the flight cap and the original shorter reading rhythm. */
+/** Quicker flights need fewer gestures; reading keeps its existing speed. */
 const longerFlights = [
   [0, visits[0].parked],
   [visits[1].departure, visits[2].parked],
@@ -122,13 +175,12 @@ export function voyageSpeedLimit(p: number) {
     smoothRange(a, a + 0.012, p) * (1 - smoothRange(b - 0.012, b, p))));
   const flight = 0.06 + 0.006 * cruising;
   const visit = visits.find(v => p >= v.parked && p <= v.departure);
-  if (visit) {
-    const reading = smoothRange(visit.parked, visit.parked + 0.01, p) *
-      (1 - smoothRange(visit.textOut, visit.departure, p));
-    return flight + 0.27 * reading;
-  }
+  if (visit) return planetVisitSpeed(p, visit);
   const approach = flight + 0.2 * smoothRange(finale.settled, finale.sealed, p);
-  return approach + (finalReadingSpeed - approach) * smoothRange(finale.sealed - 0.006, finale.sealed, p);
+  const original = approach + (finalReadingSpeed - approach) * smoothRange(finale.sealed - 0.006, finale.sealed, p);
+  const boost = Math.max(...voyageFlights.map(([a, b]) =>
+    smoothRange(a, a + 0.006, p) * (1 - smoothRange(b - 0.006, b, p))));
+  return original * (1 + boost);
 }
 
 /** Follow the full queued destination even beyond the voyage. Clamping the

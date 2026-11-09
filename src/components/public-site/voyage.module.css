@@ -1,8 +1,8 @@
 .track {
   position: relative;
   --voyage-header: 76px;
-  /* Twice the original scroll space after the logo is fully formed. */
-  height: calc(730svh + (630svh + var(--voyage-header)) * 0.045);
+  /* Shorter flights; text retains its original scroll distance. */
+  height: calc(100svh - var(--voyage-header) + (630svh + var(--voyage-header)) * var(--voyage-scroll-length));
   scroll-snap-align: end;
   background: #080a18;
   color: #f0f6f6;
@@ -193,6 +193,13 @@
   min-height: 44px;
   font-size: 12px;
   color: #e1c777;
+}
+.continueHint:hover {
+  color: #fdd835;
+}
+.continueHint:focus-visible {
+  outline: 2px solid #e1c777;
+  outline-offset: 5px;
 }
 .bottomControls {
   transition: opacity 0.3s ease;

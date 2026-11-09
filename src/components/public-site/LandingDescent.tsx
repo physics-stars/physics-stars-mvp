@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { clamp, ease, type LightSide } from "./descent-motion";
+import { smoothRange } from "./voyage-timeline";
 import styles from "./landing.module.css";
 import { vesselBodyPath } from "./GlassVessel";
 import { CurveTrail, type TrailCursor } from "./curve-trail";
@@ -54,7 +55,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
     let geometry: DescentGeometry, timeline: DescentTimeline;
     let forwardTimeline: DescentTimeline, returnTimeline: DescentTimeline;
     let travelDirection = 1;
-    let disposed = false, animated = !media.matches, driving = false;
+    let disposed = false, animated = !media.matches, driving = false, scrollingToSection = false;
     let frame = 0, navigationFrame = 0, previousTime = 0, lastInputAt = -Infinity;
     let position = 0, requested = 0, lastWrittenY = NaN, previousPosition = 0;
     let touchY: number | null = null, flashed = false, flashAt = -Infinity;
@@ -240,6 +241,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
         (animated && nearFlask && flashAge >= 0 && flashAge < 300)) schedule();
     }
     function consume(delta: number, input?: Event) {
+      if (delta) interruptSectionScroll();
       if (!delta || !animated || !driving) return;
       if (input?.cancelable) input.preventDefault();
       travelDirection = Math.sign(delta);
@@ -275,6 +277,7 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       const down = ["ArrowDown", "PageDown", "End", " "].includes(event.key);
       const up = ["ArrowUp", "PageUp", "Home"].includes(event.key);
       if (!down && !up) return;
+      interruptSectionScroll();
       if (["End", "Home"].includes(event.key)) {
         if (!animated || !driving) return;
         event.preventDefault();
@@ -305,16 +308,58 @@ export function LandingDescent({ children }: { children: ReactNode }) {
       previousPosition = position;
       schedule();
     }
-    function navigate() {
+    function interruptSectionScroll() {
+      if (!scrollingToSection) return;
+      scrollingToSection = false;
+      cancelAnimationFrame(navigationFrame);
+      adopt();
+    }
+    function navigate(event: Event) {
       driving = false;
+      scrollingToSection = false;
       travelDirection = 1;
       timeline = forwardTimeline;
       cancelAnimationFrame(navigationFrame);
+      const detail = (event as CustomEvent<string | { id: string; behavior: string }>).detail;
+      const target = typeof detail === "object" ? document.getElementById(detail.id) : null;
+      if (target && detail && typeof detail === "object" && detail.behavior === "smooth") {
+        const from = scrollY, to = target.getBoundingClientRect().top + scrollY - geometry.header;
+        // Finish the title's rise before releasing the sticky scene. Both
+        // parts meet with zero velocity and acceleration at that boundary.
+        const readingEnd = from < geometry.logoEnd && to > geometry.logoEnd ? geometry.logoEnd : from;
+        const readingDuration = animated && readingEnd - from > 0.5 ? 400 : 0;
+        const pageDuration = animated && Math.abs(to - readingEnd) > 0.5 ? 850 : 0;
+        const duration = readingDuration + pageDuration;
+        let started: number | null = null;
+        scrollingToSection = true;
+        const advance = (time: number) => {
+          navigationFrame = 0;
+          if (disposed || !scrollingToSection) return;
+          started ??= time;
+          const elapsed = time - started;
+          const top = elapsed < readingDuration
+            ? from + (readingEnd - from) * smoothRange(0, readingDuration, elapsed)
+            : pageDuration
+              ? readingEnd + (to - readingEnd) * smoothRange(0, pageDuration, elapsed - readingDuration)
+              : to;
+          window.scrollTo({ top, behavior: "instant" });
+          position = timeline.positionAtPage(scrollY); requested = position;
+          schedule();
+          if (elapsed < duration) navigationFrame = requestAnimationFrame(advance);
+          else { scrollingToSection = false; adopt(); }
+        };
+        navigationFrame = requestAnimationFrame(advance);
+        return;
+      }
       navigationFrame = requestAnimationFrame(adopt);
     }
     function voyageNavigation() { driving = false; schedule(); }
     function nativeScroll() {
       if (Math.abs(scrollY - lastWrittenY) <= 2) return;
+      if (scrollingToSection) {
+        position = timeline.positionAtPage(scrollY); requested = position;
+        schedule(); return;
+      }
       if (voyage.dataset.scrollOwner === "voyage" || voyage.dataset.voyageNavigation) {
         driving = false;
         position = timeline.positionAtPage(scrollY); requested = position;
