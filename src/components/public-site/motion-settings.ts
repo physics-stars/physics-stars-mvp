@@ -1,5 +1,7 @@
 /** Public-site pace. 1 = original desktop pace. Edit these values. */
 export const DESKTOP_SPEED_MULTIPLIER = 1.25;
+/** Additional desktop speed for planet readings and the final logo text. */
+export const DESKTOP_TEXT_SPEED_FACTOR = 1.5;
 export const MOBILE_TRAVEL_SPEED_MULTIPLIER = 1;
 /** Planet readings and the final Physics Stars logo text. */
 export const MOBILE_PLANET_TEXT_SPEED_MULTIPLIER = 2;
@@ -24,7 +26,7 @@ export const MOBILE_INERTIA_MAX_DURATION_MS = 1200;
 export const MOBILE_MOTION_QUERY = "(max-width:760px), (pointer:coarse)";
 export type MotionPhase = "travel" | "planet-text" | "slides";
 export function motionSpeed(mobile: boolean, phase: MotionPhase = "travel") {
-  if (!mobile) return DESKTOP_SPEED_MULTIPLIER;
+  if (!mobile) return DESKTOP_SPEED_MULTIPLIER * (phase === "planet-text" ? DESKTOP_TEXT_SPEED_FACTOR : 1);
   if (phase === "planet-text") return MOBILE_PLANET_TEXT_SPEED_MULTIPLIER;
   if (phase === "slides") return MOBILE_SLIDES_SPEED_MULTIPLIER;
   return MOBILE_TRAVEL_SPEED_MULTIPLIER;

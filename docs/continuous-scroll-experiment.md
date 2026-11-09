@@ -14,6 +14,8 @@ espacio previo y la gravedad mantiene su velocidad independiente.
 La velocidad global se configura únicamente en
 [`motion-settings.ts`](../src/components/public-site/motion-settings.ts):
 `DESKTOP_SPEED_MULTIPLIER = 1.25` se conserva para PC.
+`DESKTOP_TEXT_SPEED_FACTOR = 1.5` acelera adicionalmente las lecturas de planetas
+y del logo final en PC: su duración se divide entre 1,5 respecto al ajuste anterior.
 En móvil se separan `MOBILE_TRAVEL_SPEED_MULTIPLIER = 1` (viajes de luz y
 animación del logo), `MOBILE_PLANET_TEXT_SPEED_MULTIPLIER = 2` (lecturas junto
 a los planetas y texto final de Physics Stars) y `MOBILE_SLIDES_SPEED_MULTIPLIER = 2`
