@@ -19,6 +19,7 @@ import { usePublicMotionSpeed } from "./use-public-motion-speed";
 import { finalTextOffset, finalTextOpacity, planetTextOffset, planetTextOpacity, voyageScrollDistance, voyageScrollLength } from "./continuous-scroll";
 import { VoyageLoader, type VoyageSceneState } from "./VoyageLoader";
 import { VoyageStarfield } from "./VoyageStarfield";
+import { showLandingNavigation } from "./landing-settings";
 import styles from "./voyage.module.css";
 
 const Scene = dynamic(() => import("./StarVoyageScene"), {
@@ -230,37 +231,39 @@ export function StarVoyage() {
               </motion.a>
             </motion.div>
           </motion.div>
-          <div className={styles.bottomControls}>
-            <nav
-              ref={navigation}
-              className={styles.stops}
-              aria-label={copy.navigation}
-            >
-              {[
-                copy.genre,
-                ...copy.planets.map((p) => p.name),
-                "Physics Stars",
-              ].map((label, index) => (
-                <button
-                  data-stop={index}
-                  key={index}
-                  onClick={() => seek(index, true)}
-                  aria-label={label}
-                  aria-current={
-                    (
-                      navigationTarget === null
-                        ? active.chapter === index
-                        : waypointStops[index] === navigationTarget
-                    )
-                      ? "step"
-                      : undefined
-                  }
-                >
-                  <span />
-                </button>
-              ))}
-            </nav>
-          </div>
+          {showLandingNavigation && (
+            <div className={styles.bottomControls}>
+              <nav
+                ref={navigation}
+                className={styles.stops}
+                aria-label={copy.navigation}
+              >
+                {[
+                  copy.genre,
+                  ...copy.planets.map((p) => p.name),
+                  "Physics Stars",
+                ].map((label, index) => (
+                  <button
+                    data-stop={index}
+                    key={index}
+                    onClick={() => seek(index, true)}
+                    aria-label={label}
+                    aria-current={
+                      (
+                        navigationTarget === null
+                          ? active.chapter === index
+                          : waypointStops[index] === navigationTarget
+                      )
+                        ? "step"
+                        : undefined
+                    }
+                  >
+                    <span />
+                  </button>
+                ))}
+              </nav>
+            </div>
+          )}
         </div>
       )}
       {linear && (

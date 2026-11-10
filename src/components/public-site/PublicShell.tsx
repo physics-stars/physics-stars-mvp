@@ -19,6 +19,7 @@ import { ArrowUpRight } from "lucide-react";
 import { languageNames, locales, publicCopy, type Locale } from "./copy";
 import styles from "./public.module.css";
 import { usePublicMotionSpeed } from "./use-public-motion-speed";
+import { showLandingNavigation } from "./landing-settings";
 
 const brandFont = Exo_2({
   subsets: ["latin"],
@@ -83,7 +84,7 @@ export function PublicShell({
         </a>
         <header className={styles.header}>
           <Brand locale={locale} />
-          {!login && <LandingNavigation locale={locale} />}
+          {!login && showLandingNavigation && <LandingNavigation locale={locale} />}
           <div className={styles.headerActions}>
             <Suspense fallback={<LanguageLinks locale={locale} pathname={login ? "/login" : "/"} />}>
               <LanguageSwitch />
