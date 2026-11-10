@@ -23,10 +23,7 @@ const cinzel = Cinzel({
 export const metadata: Metadata = {
   metadataBase: new URL("https://physicsstars.com"),
 
-  title: {
-    default: "Physics Stars | Aprèn física amb pensament crític i gamificació",
-    template: "%s | Physics Stars",
-  },
+  title: "Physics Stars | Aprèn física amb pensament crític i gamificació",
   description:
     "A Physics Stars reinventem la manera d’aprendre física amb una plataforma edtech que integra de forma immersiva pensament crític i gamificació.",
   applicationName: "Physics Stars",
