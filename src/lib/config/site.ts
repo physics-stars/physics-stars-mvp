@@ -1,5 +1,6 @@
 // URL pública canònica. La fan servir les metadades, el sitemap i el JSON-LD.
-export const siteUrl = "https://physicsstars.com";
+// Ha de coincidir amb el domini principal de Vercel (l'altre hi redirigeix).
+export const siteUrl = "https://www.physicsstars.com";
 export const siteName = "Physics Stars";
 
 // Mentre l'app no estigui llesta només la landing (/, /ca, /es, /en) és
