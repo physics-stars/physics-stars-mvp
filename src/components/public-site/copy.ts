@@ -1,6 +1,7 @@
 export const locales = ["en", "es", "ca"] as const;
 export type Locale = (typeof locales)[number];
 export const contactEmail = "david.diestre.r@gmail.com";
+export const defaultLocale: Locale = "ca";
 export const languageNames = { en: "English", es: "Español", ca: "Català" };
 
 export function isLocale(value: unknown): value is Locale {
@@ -8,7 +9,16 @@ export function isLocale(value: unknown): value is Locale {
 }
 
 const ca = {
-  meta: "El problema encara no està escrit. Physics Stars és un videojoc narratiu de física per a secundària. Un projecte nascut fent classes de repàs, ara en desenvolupament.",
+  seo: {
+    title: "Physics Stars | Posa't a la pell d'un científic",
+    description:
+      "Explora mons oberts, parla amb personatges, pren mesures i usa el pensament crític per entendre cada situació i resoldre-la aplicant la física.",
+    tagline: "Aprèn física amb pensament crític i gamificació",
+    organization:
+      "Plataforma edtech que reinventa la manera d'aprendre física integrant pensament crític i gamificació.",
+    imageAlt: "Physics Stars - Plataforma EdTech de física gamificada",
+    keywords: ["física", "edtech", "gamificació", "educació", "pensament crític", "aprendre física", "ciència interactiva", "Physics Stars"],
+  },
   nav: {
     home: "El viatge", game: "Com es juga", teachers: "Per a docents", team: "Qui som",
     login: "Entra", language: "Idioma", skip: "Salta al contingut",
@@ -45,12 +55,29 @@ const ca = {
     artBody: "Observa què passa. Decideix què necessites saber. La física t'ajudarà a continuar.",
     inside: "El joc i les àrees internes estan disponibles en català.",
   },
+  soon: {
+    meta: "En construcció — Physics Stars",
+    label: "En construcció",
+    title: "Encara estem traçant aquesta ruta.",
+    body: "Aquesta part de Physics Stars encara no està llesta. Hi estem treballant perquè estigui a l'altura del viatge; mentrestant, pots descobrir el projecte des de l'inici.",
+    back: "Torna a l'inici",
+    contact: "Contacta'ns",
+  },
 };
 
 export type PublicCopy = typeof ca;
 
 const es: PublicCopy = {
-  meta: "El problema aún no está escrito. Physics Stars es un videojuego narrativo de física para secundaria. Un proyecto nacido dando clases de repaso, ahora en desarrollo.",
+  seo: {
+    title: "Physics Stars | Ponte en la piel de un científico",
+    description:
+      "Explora mundos abiertos, habla con personajes, toma medidas y usa el pensamiento crítico para entender cada situación y resolverla aplicando la física.",
+    tagline: "Aprende física con pensamiento crítico y gamificación",
+    organization:
+      "Plataforma edtech que reinventa la manera de aprender física integrando pensamiento crítico y gamificación.",
+    imageAlt: "Physics Stars - Plataforma EdTech de física gamificada",
+    keywords: ["física", "edtech", "gamificación", "educación", "pensamiento crítico", "aprender física", "ciencia interactiva", "Physics Stars"],
+  },
   nav: {
     home: "El viaje", game: "Cómo se juega", teachers: "Para docentes", team: "Quiénes somos",
     login: "Entra", language: "Idioma", skip: "Saltar al contenido",
@@ -87,10 +114,27 @@ const es: PublicCopy = {
     artBody: "Observa qué ocurre. Decide qué necesitas saber. La física te ayudará a continuar.",
     inside: "El juego y las áreas internas están disponibles en catalán.",
   },
+  soon: {
+    meta: "En construcción — Physics Stars",
+    label: "En construcción",
+    title: "Todavía estamos trazando esta ruta.",
+    body: "Esta parte de Physics Stars aún no está lista. Estamos trabajando para que esté a la altura del viaje; mientras tanto, puedes descubrir el proyecto desde el inicio.",
+    back: "Volver al inicio",
+    contact: "Contacta con nosotros",
+  },
 };
 
 const en: PublicCopy = {
-  meta: "The question is yours to find. Physics Stars is a story-driven physics game for secondary school. Born out of tutoring, now in development.",
+  seo: {
+    title: "Physics Stars | Step Into the Shoes of a Scientist",
+    description:
+      "Explore open-world levels, talk to characters, take measurements, and use critical thinking to understand each situation and solve it using physics.",
+    tagline: "Learn physics through critical thinking and gamification",
+    organization:
+      "Edtech platform reinventing how physics is learned by combining critical thinking and gamification.",
+    imageAlt: "Physics Stars - Gamified physics EdTech platform",
+    keywords: ["physics", "edtech", "gamification", "education", "critical thinking", "learn physics", "interactive science", "Physics Stars"],
+  },
   nav: {
     home: "The journey", game: "How it plays", teachers: "For teachers", team: "Our story",
     login: "Log in", language: "Language", skip: "Skip to content",
@@ -126,6 +170,14 @@ const en: PublicCopy = {
     artTitle: "There's a question waiting for you.",
     artBody: "Observe what's happening. Decide what you need to know. Physics will help you take it from there.",
     inside: "The game and signed-in areas are available in Catalan.",
+  },
+  soon: {
+    meta: "Under construction — Physics Stars",
+    label: "Under construction",
+    title: "We're still charting this route.",
+    body: "This part of Physics Stars isn't ready yet. We're working to make it worthy of the journey; in the meantime, you can explore the project from the start.",
+    back: "Back to home",
+    contact: "Contact us",
   },
 };
 

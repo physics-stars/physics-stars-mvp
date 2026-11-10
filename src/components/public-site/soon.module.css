@@ -1,0 +1,115 @@
+.main {
+  position: relative;
+  min-height: calc(100svh - 76px);
+  display: flex;
+  align-items: flex-end;
+  padding: 12vh 4.5vw 14vh;
+  overflow: hidden;
+}
+.route {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.route path { fill: none; vector-effect: non-scaling-stroke; }
+.travelled {
+  stroke: #fdd835;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.55;
+  filter: drop-shadow(0 0 6px #fdd83560);
+}
+.pending {
+  stroke: #c4a9ea;
+  stroke-width: 1;
+  stroke-dasharray: 2 9;
+  stroke-linecap: round;
+  opacity: 0.45;
+}
+.light {
+  position: absolute;
+  left: 64%;
+  top: 41.6%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fffbe8;
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 0 6px 2px #fff3c0,
+    0 0 22px 8px #fdd83570,
+    0 0 70px 30px #fdd83522,
+    0 0 160px 80px #f5b84210;
+  animation: breathe calc(5.5s / var(--public-motion-speed, 1)) ease-in-out infinite;
+}
+.copy {
+  position: relative;
+  max-width: 640px;
+}
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px !important;
+  color: #c4a9ea;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.label::before {
+  content: "";
+  width: 22px;
+  height: 1px;
+  background: currentColor;
+}
+.copy h1 {
+  font-size: clamp(40px, 5.2vw, 76px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+}
+.body {
+  max-width: 500px;
+  margin-top: 24px !important;
+  color: #bbb9ce;
+  font-size: 18px;
+  line-height: 1.65;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 28px;
+  margin-top: 40px;
+}
+.actions > a:first-child { justify-content: flex-start; gap: 14px; }
+.contact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: #e9e3f5;
+  font-size: 15px;
+  font-weight: 500;
+  border-bottom: 1px solid #c4a9ea55;
+  transition: border-color calc(0.2s / var(--public-motion-speed, 1));
+}
+.contact:hover { border-color: #f1e6ff; }
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.82; transform: translate(-50%, -50%) scale(0.92); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .light { animation: none; }
+}
+@media (max-width: 760px) {
+  .main { padding: 10vh 20px 10vh; }
+  .body { font-size: 16px; }
+  /* La ruta es queda a la meitat superior perquè no travessi el text. */
+  .route { height: 42%; }
+  .light { top: calc(42% * 250 / 600); }
+}

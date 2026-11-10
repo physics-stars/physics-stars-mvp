@@ -26,7 +26,7 @@ export function LoginView() {
         </div>
       </div>
       <div className={styles.loginPanel}>
-        <Link className={styles.backLink} href={`/?lang=${locale}`}>
+        <Link className={styles.backLink} href={`/${locale}`}>
           <ArrowLeft size={17} aria-hidden="true" />
           {t.back}
         </Link>

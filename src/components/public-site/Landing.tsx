@@ -315,7 +315,7 @@ export function Landing() {
           <footer className={styles.footer}>
             <div>
               <a
-                href={`/?lang=${locale}`}
+                href={`/${locale}`}
                 aria-label="Physics Stars"
                 translate="no"
                 className={styles.footerBrand}

@@ -16,10 +16,11 @@ import { Exo_2 } from "next/font/google";
 import localFont from "next/font/local";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
-import { languageNames, locales, publicCopy, type Locale } from "./copy";
+import { isLocale, languageNames, locales, publicCopy, type Locale } from "./copy";
 import styles from "./public.module.css";
 import { usePublicMotionSpeed } from "./use-public-motion-speed";
 import { showLandingNavigation } from "./landing-settings";
+import { appAccessEnabled } from "@/lib/config/site";
 
 const brandFont = Exo_2({
   subsets: ["latin"],
@@ -54,10 +55,12 @@ export function PublicShell({
   locale,
   children,
   login = false,
+  navigation = !login,
 }: {
   locale: Locale;
   children: ReactNode;
   login?: boolean;
+  navigation?: boolean;
 }) {
   const t = publicCopy[locale];
   const motionSpeed = usePublicMotionSpeed();
@@ -84,12 +87,12 @@ export function PublicShell({
         </a>
         <header className={styles.header}>
           <Brand locale={locale} />
-          {!login && showLandingNavigation && <LandingNavigation locale={locale} />}
+          {navigation && showLandingNavigation && <LandingNavigation locale={locale} />}
           <div className={styles.headerActions}>
-            <Suspense fallback={<LanguageLinks locale={locale} pathname={login ? "/login" : "/"} />}>
+            <Suspense fallback={<LanguageLinks locale={locale} pathname={login ? "/login" : `/${locale}`} />}>
               <LanguageSwitch />
             </Suspense>
-            {!login && (
+            {!login && appAccessEnabled && (
               <Link className={styles.loginLink} href={`/login?lang=${locale}`}>
                 {t.nav.login}
                 <ArrowUpRight size={16} aria-hidden="true" />
@@ -205,7 +208,7 @@ function LandingNavigation({ locale }: { locale: Locale }) {
 export function Brand({ locale }: { locale: Locale }) {
   return (
     <Link
-      href={`/?lang=${locale}`}
+      href={`/${locale}`}
       aria-label="Physics Stars"
       translate="no"
       className={styles.brand}
@@ -248,12 +251,18 @@ function LanguageLinks({ locale, pathname, search = "" }: {
       aria-label={publicCopy[locale].nav.language}
     >
       {locales.map((language) => {
+        // La landing porta l'idioma al primer segment (/ca, /es, /en); el
+        // login encara el rep com a `?lang=`.
+        const [, first, ...rest] = pathname.split("/");
         const params = new URLSearchParams(search);
-        params.set("lang", language);
+        let path = pathname;
+        if (isLocale(first)) path = `/${[language, ...rest].join("/")}`;
+        else params.set("lang", language);
+        const query = params.toString();
         return (
           <Link
             key={language}
-            href={`${pathname}?${params}`}
+            href={query ? `${path}?${query}` : path}
             prefetch={false}
             scroll={false}
             hrefLang={language}

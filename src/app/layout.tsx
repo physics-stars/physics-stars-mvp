@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Cinzel } from "next/font/google";
+import { siteName, siteUrl } from "@/lib/config/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,25 +21,14 @@ const cinzel = Cinzel({
   weight: ["500", "700", "900"],
 });
 
+// Metadades compartides per tota l'aplicació. Les de la landing (títol,
+// descripció, Open Graph, hreflang i JSON-LD) són a `[lang]/layout.tsx`,
+// traduïdes a cada idioma.
 export const metadata: Metadata = {
-  metadataBase: new URL("https://physicsstars.com"),
-
-  title: "Physics Stars | Aprèn física amb pensament crític i gamificació",
-  description:
-    "A Physics Stars reinventem la manera d’aprendre física amb una plataforma edtech que integra de forma immersiva pensament crític i gamificació.",
-  applicationName: "Physics Stars",
+  metadataBase: new URL(siteUrl),
+  title: siteName,
+  applicationName: siteName,
   category: "education",
-
-  keywords: [
-    "física",
-    "edtech",
-    "gamificació",
-    "educació",
-    "pensament crític",
-    "aprendre física",
-    "ciència interactiva",
-    "Physics Stars",
-  ],
 
   authors: [
     { name: "David Diestre" },
@@ -46,38 +36,8 @@ export const metadata: Metadata = {
     { name: "Aissam Khadraoui" },
     { name: "Víctor Calvo" },
   ],
-  creator: "Physics Stars",
-  publisher: "Physics Stars",
-
-  alternates: {
-    canonical: "/",
-  },
-
-  openGraph: {
-    title: "Physics Stars | Aprèn física amb pensament crític i gamificació",
-    description:
-      "A Physics Stars reinventem la manera d’aprendre física amb una plataforma edtech que integra de forma immersiva pensament crític i gamificació.",
-    url: "/",
-    siteName: "Physics Stars",
-    locale: "ca_ES",
-    type: "website",
-    images: [
-      {
-        url: "/preview_og.png",
-        width: 1200,
-        height: 630,
-        alt: "Physics Stars - Plataforma EdTech de física gamificada",
-      },
-    ],
-  },
-
-  twitter: {
-    card: "summary_large_image",
-    title: "Physics Stars | Aprèn física amb pensament crític i gamificació",
-    description:
-      "A Physics Stars reinventem la manera d’aprendre física amb una plataforma edtech que integra de forma immersiva pensament crític i gamificació.",
-    images: ["/preview_twitter.png"],
-  },
+  creator: siteName,
+  publisher: siteName,
 
   icons: {
     icon: [
@@ -93,70 +53,13 @@ export const metadata: Metadata = {
     ],
   },
 
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      noimageindex: false,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
+  // Per defecte res no s'indexa; la landing ho activa a `[lang]/layout.tsx`.
+  robots: { index: false, follow: false },
+
+  // Token de la propietat de Google Search Console (mètode etiqueta HTML).
+  // No cal si la propietat es verifica per DNS.
+  verification: { google: process.env.GOOGLE_SITE_VERIFICATION },
 };
-
-
-
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "EducationalOrganization",
-      "@id": "https://physicsstars.com/#organization",
-      name: "Physics Stars",
-      url: "https://physicsstars.com",
-      logo: {
-        "@type": "ImageObject",
-        "@id": "https://physicsstars.com/#logo",
-        url: "https://physicsstars.com/icon-512x512.png",
-        contentUrl: "https://physicsstars.com/icon-512x512.png",
-        width: 512,
-        height: 512,
-        caption: "Physics Stars",
-      },
-      image: "https://physicsstars.com/preview_og.png",
-      description:
-        "Plataforma edtech que reinventa la manera d'aprendre física integrant pensament crític i gamificació.",
-      knowsLanguage: ["ca", "es", "en"],
-      founder: [
-        { "@type": "Person", name: "David Diestre" },
-        { "@type": "Person", name: "Juan Roset" },
-        { "@type": "Person", name: "Aissam Khadraoui" },
-        { "@type": "Person", name: "Víctor Calvo" },
-      ],
-      // Add your real social media links below when available
-      sameAs: [
-        // "https://www.linkedin.com/company/physics-stars",
-        // "https://www.instagram.com/physicsstars",
-        // "https://x.com/PhysicsStars",
-      ],
-    },
-    {
-      "@type": "WebSite",
-      "@id": "https://physicsstars.com/#website",
-      url: "https://physicsstars.com",
-      name: "Physics Stars",
-      description: "Aprèn física amb pensament crític i gamificació",
-      publisher: {
-        "@id": "https://physicsstars.com/#organization",
-      },
-      inLanguage: "ca",
-    },
-  ],
-};
-
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -165,10 +68,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${cinzel.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
         {children}
       </body>
     </html>
