@@ -169,7 +169,7 @@ export function StarVoyage() {
                 active.reading
               }
             >
-              <h1>{copy.heroTitle}</h1>
+              <HeroTitle>{copy.heroTitle}</HeroTitle>
               <p className={styles.description}>{copy.heroBody}</p>
             </VoyageFrame>
             {copy.planets.map((planet, index) => (
@@ -270,7 +270,7 @@ export function StarVoyage() {
         <div className={styles.reading}>
           <div className={styles.readingIntro}>
             <Image src="/logo.svg" width={100} height={100} alt="" />
-            <h1>{copy.heroTitle}</h1>
+            <HeroTitle>{copy.heroTitle}</HeroTitle>
             <p>{copy.heroBody}</p>
           </div>
           <p className={styles.stationary}>{copy.stationary}</p>
@@ -318,5 +318,16 @@ function VoyageFrame({
     >
       {children}
     </motion.div>
+  );
+}
+
+// El nom de la marca forma part del títol principal per als cercadors i
+// lectors de pantalla, però no es veu: el disseny mostra només la frase.
+function HeroTitle({ children }: { children: ReactNode }) {
+  return (
+    <h1>
+      <span className={styles.srOnly} translate="no">Physics Stars: </span>
+      {children}
+    </h1>
   );
 }
